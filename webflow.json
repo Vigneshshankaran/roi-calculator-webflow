@@ -1,0 +1,17 @@
+{
+  "library": {
+    "name": "EquityList ROI Calculator",
+    "id": "equitylist-roi-calculator",
+    "description": "Equity administration cost comparison calculator",
+    "components": [
+      "./src/**/*.webflow.@(js|jsx|mjs|ts|tsx)"
+    ]
+  },
+  "telemetry": {
+    "global": {
+      "allowTelemetry": true,
+      "lastPrompted": 1781047507637,
+      "version": "1.23.0"
+    }
+  }
+}

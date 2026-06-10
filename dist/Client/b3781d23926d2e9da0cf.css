@@ -1,0 +1,117 @@
+@import url(https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap);
+/* ── Google Fonts (must be @import, not <link>, to work inside Shadow DOM) ── */
+
+/* ── Host element fills its Webflow layout container ── */
+:host {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Keyframe animations referenced by the component ── */
+@keyframes roi-pulse {
+  0%   { transform: scale(1);   opacity: 0.35; }
+  70%  { transform: scale(2.4); opacity: 0; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+@keyframes amber-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes slideDown {
+  from { max-height: 0;     opacity: 0; }
+  to   { max-height: 200px; opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { max-height: 200px; opacity: 1; }
+  to   { max-height: 0;     opacity: 0; }
+}
+
+/* ── Animation utility classes ── */
+.stale-alert {
+  max-height: 200px;
+  overflow: hidden;
+  animation: slideDown 220ms ease-out;
+}
+
+.stale-alert.leaving {
+  animation: slideUp 180ms ease-in forwards;
+}
+
+.amber-spin {
+  animation: amber-spin 2.4s linear infinite;
+}
+
+/* ── Stale panel dimming ── */
+.panel-body--stale {
+  opacity: 0.45;
+  transition: opacity 200ms ease;
+}
+
+/* ── Accessibility: reduce motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .stale-alert,
+  .stale-alert.leaving,
+  .amber-spin {
+    animation: none;
+  }
+}
+
+/* ── Form grids ── */
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 32px; }
+.form-grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px 24px; }
+.form-grid-shareholders { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: flex-end; }
+
+/* ── Form cards ── */
+.form-card {
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e0dff5;
+  padding: 24px 24px 28px;
+  box-shadow: 0 1px 4px rgba(13,20,37,0.04);
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.form-card:focus-within {
+  border-color: #d6d3f0;
+  box-shadow: 0 4px 24px rgba(13,20,37,0.08);
+}
+
+/* ── Main layout grid ── */
+.roi-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 56px;
+  align-items: flex-start;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1099px) {
+  .roi-grid { grid-template-columns: 1fr; gap: 32px; }
+}
+@media (max-width: 768px) {
+  .form-grid-2 { grid-template-columns: 1fr; gap: 20px; }
+  .form-grid-4 { grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-grid-shareholders { grid-template-columns: 1fr; }
+}
+
+/* ── Remove number input spinners ── */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
