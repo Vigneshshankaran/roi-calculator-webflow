@@ -131,7 +131,7 @@ export default declareComponent(ROICalculator, {
     }),
   },
   options: {
-    ssr: false,
+    ssr: true,
     applyTagSelectors: false,
   },
 })

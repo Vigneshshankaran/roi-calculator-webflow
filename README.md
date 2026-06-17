@@ -47,4 +47,5 @@ After sharing, open the Webflow Designer → Add panel (A) → **Code Components
 ## Notes
 
 - The component renders inside a **Shadow DOM**, fully isolated from page CSS. Google Fonts (Inter, JetBrains Mono, Fraunces) are loaded via `@import` in `ROICalculator.css` since `<head>` links don't cross the Shadow DOM boundary.
-- `ssr: false` is set because the component reads `window.innerWidth` for its responsive layout.
+- `ssr: true` is enabled. To avoid hydration mismatch, the component defaults to a desktop layout during SSR/hydration and transitions dynamically on mount via a `useEffect` layout checker.
+

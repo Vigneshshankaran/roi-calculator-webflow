@@ -2286,7 +2286,7 @@ export default function ROICalculator({
     return "409a";
   };
 
-  const [width, setWidth] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 1280));
+  const [width, setWidth] = useState(1280);
   const [formData, setFormData] = useState(null);
   const [results, setResults] = useState(() => {
     const defaultInputs = {
@@ -2347,6 +2347,7 @@ export default function ROICalculator({
   ]);
 
   useEffect(() => {
+    setWidth(window.innerWidth);
     const handleResize = () => setWidth(window.innerWidth);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
