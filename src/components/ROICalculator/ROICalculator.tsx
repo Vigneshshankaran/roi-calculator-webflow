@@ -764,7 +764,7 @@ function ChipSelect({ value, onChange, options, mono = true }) {
         const val = typeof o === "string" ? o : o.value;
         const label = typeof o === "string" ? o : o.label;
         const disabled = typeof o === "object" && o.disabled;
-        const sel = value === val;
+        const sel = value === val && !disabled;
         return (
           <button
             key={val}
@@ -1048,7 +1048,17 @@ function AForm({
   const [geoOp, setGeoOp] = useState(defaultGeoOp);
   const [legalEntity, setLegalEntity] = useState(defaultLegalEntity);
   const [fundraise, setFundraise] = useState(defaultFundraise);
-  const [fundraiseRound, setFundraiseRound] = useState(defaultFundraiseRound);
+  const [fundraiseRound, setFundraiseRound] = useState(() => {
+    const stageKey = defaultStage;
+    const roundKey = defaultFundraiseRound;
+    const stageOrd = { preseed: 0, seed: 1, seriesab: 2, seriesbc: 3, seriesc: 4 };
+    const rounds = ["preseed", "seed", "seriesab", "seriesbc", "seriesc"];
+    if ((stageOrd[roundKey] ?? 99) <= (stageOrd[stageKey] ?? -1)) {
+      const nextRound = rounds.find(r => (stageOrd[r] ?? 99) > (stageOrd[stageKey] ?? -1));
+      return nextRound || "seriesc";
+    }
+    return roundKey;
+  });
   const [newShareholdersFromFundraise, setNewShareholdersFromFundraise] = useState(defaultNewShareholdersFromFundraise);
   const [valuation, setValuation] = useState(defaultValuation);
   const [valFreq, setValFreq] = useState(defaultValFreq);
@@ -1057,7 +1067,31 @@ function AForm({
   const [numericErrors, setNumericErrors] = useState({});
 
   // Sync form state when Webflow default props change
-  useEffect(() => { setStage(defaultStage); }, [defaultStage]);
+  useEffect(() => {
+    setStage(defaultStage);
+    const stageKey = defaultStage;
+    const roundKey = fundraiseRound;
+    const stageOrd = { preseed: 0, seed: 1, seriesab: 2, seriesbc: 3, seriesc: 4 };
+    const rounds = ["preseed", "seed", "seriesab", "seriesbc", "seriesc"];
+    if ((stageOrd[roundKey] ?? 99) <= (stageOrd[stageKey] ?? -1)) {
+      const nextRound = rounds.find(r => (stageOrd[r] ?? 99) > (stageOrd[stageKey] ?? -1));
+      setFundraiseRound(nextRound || "seriesc");
+    }
+  }, [defaultStage]);
+
+  useEffect(() => {
+    const stageKey = stage;
+    const roundKey = defaultFundraiseRound;
+    const stageOrd = { preseed: 0, seed: 1, seriesab: 2, seriesbc: 3, seriesc: 4 };
+    const rounds = ["preseed", "seed", "seriesab", "seriesbc", "seriesc"];
+    if ((stageOrd[roundKey] ?? 99) <= (stageOrd[stageKey] ?? -1)) {
+      const nextRound = rounds.find(r => (stageOrd[r] ?? 99) > (stageOrd[stageKey] ?? -1));
+      setFundraiseRound(nextRound || "seriesc");
+    } else {
+      setFundraiseRound(defaultFundraiseRound);
+    }
+  }, [defaultFundraiseRound]);
+
   useEffect(() => { setShareholders(defaultShareholders); }, [defaultShareholders]);
   useEffect(() => { setOptionHolders(defaultOptionHolders); }, [defaultOptionHolders]);
   useEffect(() => { setNewHireGrants(defaultNewHireGrants); }, [defaultNewHireGrants]);
@@ -1066,7 +1100,6 @@ function AForm({
   useEffect(() => { setGeoOp(defaultGeoOp); }, [defaultGeoOp]);
   useEffect(() => { setLegalEntity(defaultLegalEntity); }, [defaultLegalEntity]);
   useEffect(() => { setFundraise(defaultFundraise); }, [defaultFundraise]);
-  useEffect(() => { setFundraiseRound(defaultFundraiseRound); }, [defaultFundraiseRound]);
   useEffect(() => { setNewShareholdersFromFundraise(defaultNewShareholdersFromFundraise); }, [defaultNewShareholdersFromFundraise]);
   useEffect(() => { setValuation(defaultValuation); }, [defaultValuation]);
   useEffect(() => { setValFreq(defaultValFreq); }, [defaultValFreq]);
@@ -1105,7 +1138,7 @@ function AForm({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <FormSection number={1} title="Company Profile" subtitle="Geography determines compliance requirements and salary benchmarks.">
+      <FormSection number={1} title="Company profile" subtitle="Geography determines compliance requirements and salary benchmarks.">
         <div className="form-grid-2">
           <Dropdown label="Country of Incorporation" value={geoInc} required error={errors?.geoInc} options={[{ value: "india", label: "India" }, { value: "us", label: "United States" }, { value: "singapore", label: "Singapore" }, { value: "uk", label: "United Kingdom" }]} onChange={(v) => { setGeoInc(v); onInputChange && onInputChange(); }} />
           <Dropdown label="Country of Operation" value={geoOp} required error={errors?.geoOp} options={[{ value: "india", label: "India" }, { value: "us", label: "United States" }, { value: "singapore", label: "Singapore" }, { value: "uk", label: "United Kingdom" }]} onChange={(v) => { setGeoOp(v); onInputChange && onInputChange(); }} />
@@ -1121,7 +1154,7 @@ function AForm({
         </div>
       </FormSection>
 
-      <FormSection number={2} title="Equity Structure" subtitle="Stakeholder volume scales your cap table reconciliation and grant overhead.">
+      <FormSection number={2} title="Equity structure" subtitle="Stakeholder volume scales your cap table reconciliation and grant overhead.">
         <div className="form-grid-4">
           <FormField label={<>Shareholders <InfoTip text="Founders, investors, and any other equity holders on your cap table." /></>} required value={shareholders} onChange={(v) => { setShareholders(v); onInputChange && onInputChange(); }} type="number" error={numericErrors.shareholders ? "Only numbers allowed" : errors?.shareholders} onNumericError={(hasError) => setNumericErrors({ ...numericErrors, shareholders: hasError })} />
           <FormField label={<>Option holders <InfoTip text="Employees with stock options." /></>} required value={optionHolders} onChange={(v) => { setOptionHolders(v); onInputChange && onInputChange(); }} type="number" error={numericErrors.optionHolders ? "Only numbers allowed" : errors?.optionHolders} onNumericError={(hasError) => setNumericErrors({ ...numericErrors, optionHolders: hasError })} />
@@ -1139,11 +1172,11 @@ function AForm({
         </div>
       </FormSection>
 
-      <FormSection number={3} title="Current Operations" subtitle="How you currently manage equity administration.">
+      <FormSection number={3} title="Current operations" subtitle="How you currently manage equity administration.">
         <Dropdown label="Administrative Method" value={adminMethod} required error={errors?.meth} options={[{ value: "in-house", label: "In-house (Spreadsheets)" }, { value: "outsourced", label: "Outsourced (CA/Law Firm)" }]} onChange={(v) => { setAdminMethod(v); onInputChange && onInputChange(); }} />
       </FormSection>
 
-      <PrimaryBtn size="lg" fullWidth style={{ padding: "8px 16px" }} onClick={() => {
+      <PrimaryBtn size="lg" fullWidth style={{ padding: "16px 28px" }} onClick={() => {
         const overrides = {};
         if (editedRate !== null && editedRate !== "") {
           overrides.rate = parseInt(editedRate, 10);
@@ -1262,9 +1295,6 @@ function FundraiseExpanded({ oneColumn, round, setRound, currentStage, sharehold
       </div>
       <div className="form-grid-shareholders">
         <FormField label="New shareholders" placeholder="e.g. 8" value={shareholders} onChange={setShareholders} type="number" required error={errors?.newShareholdersFromFundraise} onNumericError={() => {}} />
-        <div style={{ fontSize: 12, color: A.mute, lineHeight: 1.5, marginBottom: 8 }}>
-          Investors, SAFE conversions, and new ESOP grants all count toward stakeholder load.
-        </div>
       </div>
     </div>
   );
@@ -1784,7 +1814,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                   <>Cost isn't the deciding factor. EquityList ensures your cap table stays accurate, audit-ready, and compliant as you scale.</>
                 )}
               </span>
-              <PrimaryBtn size="md" fullWidth style={{ padding: "8px 16px" }} onClick={() => window.open(ctaUrl, "_blank")}>
+              <PrimaryBtn size="md" fullWidth style={{ padding: "16px 28px" }} onClick={() => window.open(ctaUrl, "_blank")}>
                 {ctaText}
                 <svg className="btn-arr-icon" width="16" height="16" viewBox="0 0 19 19" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "inline-block" }}><path d="M13.5333 9.33379L7 5.13379V13.5338L13.5333 9.33379Z" fill="white" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </PrimaryBtn>
@@ -2173,7 +2203,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
             <>Cost isn't the deciding factor. The real difference is reliability as complexity increases. EquityList ensures your cap table stays accurate, audit-ready, and compliant as you scale.</>
           )}
         </span>
-        <PrimaryBtn size="md" fullWidth style={{ padding: "8px 16px" }} onClick={() => window.open(ctaUrl, "_blank")}>
+        <PrimaryBtn size="md" fullWidth style={{ padding: "16px 28px" }} onClick={() => window.open(ctaUrl, "_blank")}>
           {ctaText}
           <svg className="btn-arr-icon" width="16" height="16" viewBox="0 0 19 19" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "inline-block", transition: "transform 0.15s" }}><g opacity="0.6"><path d="M13.5333 9.33379L7 5.13379V13.5338L13.5333 9.33379Z" fill="white" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></g></svg>
         </PrimaryBtn>
