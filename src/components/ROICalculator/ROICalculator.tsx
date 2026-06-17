@@ -1647,7 +1647,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                 <span style={{ display: "block", padding: "12px 18px 18px", borderTop: `1px solid ${A.lineSoft}`, marginTop: 12 }}>
                   <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0.4, textTransform: "uppercase", color: A.ink, display: "block", marginBottom: 12 }}>Assumptions</span>
                   
-                  {recalcFormValues?.meth === "in-house" && (
+                  {v.meth === "in-house" && (
                     <>
                       <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
                         <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase", color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Blended hourly rate</span>
@@ -1694,7 +1694,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                     </>
                   )}
 
-                  {recalcFormValues?.meth === "outsourced" && (
+                  {v.meth === "outsourced" && (
                     <>
                       <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
                         <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase", color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Retainer cost</span>
@@ -1761,7 +1761,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                         let hasChanges = false;
                         if (editedRate !== null && editedRate !== "") {
                           const rateVal = parseInt(editedRate, 10);
-                          if (recalcFormValues?.meth === "outsourced") {
+                          if (v.meth === "outsourced") {
                             if (rateVal !== Math.round(v.methodExtCost)) { overrides.methodExtCost = rateVal; hasChanges = true; }
                           } else {
                             if (rateVal !== Math.round(v.rate)) { overrides.rate = rateVal; hasChanges = true; }
@@ -1769,7 +1769,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                         }
                         if (editedHours !== null && editedHours !== "") {
                           const hoursVal = parseInt(editedHours, 10);
-                          const compareHours = recalcFormValues?.meth === "outsourced" ? Math.round(v.manualHTotal * v.mult) : Math.round(v.manualHTotal);
+                          const compareHours = v.meth === "outsourced" ? Math.round(v.manualHTotal * v.mult) : Math.round(v.manualHTotal);
                           if (hoursVal !== compareHours) { overrides.manualHTotal = hoursVal; hasChanges = true; }
                         }
                         if (hasChanges) {
@@ -1952,7 +1952,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
             <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0.4, textTransform: "uppercase" as const, color: A.ink, display: "block", marginBottom: 12 }}>Assumptions</span>
             
             {/* IN-HOUSE METHOD */}
-            {recalcFormValues?.meth === "in-house" && (
+            {v.meth === "in-house" && (
               <>
                 <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
                   <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase" as const, color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Blended hourly rate</span>
@@ -2000,7 +2000,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
             )}
 
             {/* OUTSOURCED RETAINER METHOD */}
-            {recalcFormValues?.meth === "outsourced" && (
+            {v.meth === "outsourced" && (
               <>
                 <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
                   <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase" as const, color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Retainer cost</span>
@@ -2070,7 +2070,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                   
                   if (editedRate !== null && editedRate !== "") {
                     const rateVal = parseInt(editedRate, 10);
-                    if (recalcFormValues?.meth === "outsourced") {
+                    if (v.meth === "outsourced") {
                       if (rateVal !== Math.round(v.methodExtCost)) {
                         overrides.methodExtCost = rateVal;
                         hasChanges = true;
@@ -2085,7 +2085,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                   
                   if (editedHours !== null && editedHours !== "") {
                     const hoursVal = parseInt(editedHours, 10);
-                    const compareHours = recalcFormValues?.meth === "outsourced" ? Math.round(v.manualHTotal * v.mult) : Math.round(v.manualHTotal);
+                    const compareHours = v.meth === "outsourced" ? Math.round(v.manualHTotal * v.mult) : Math.round(v.manualHTotal);
                     if (hoursVal !== compareHours) {
                       overrides.manualHTotal = hoursVal;
                       hasChanges = true;
@@ -2285,28 +2285,35 @@ export default function ROICalculator({
     if (val === "HMRC") return "hmrc";
     return "409a";
   };
+  // Mirror AForm's initial fundraiseRound snap (round must be a stage after the current one)
+  const snapFundraiseRound = (stageKey, roundKey) => {
+    const stageOrd = { preseed: 0, seed: 1, seriesab: 2, seriesbc: 3, seriesc: 4 };
+    const rounds = ["preseed", "seed", "seriesab", "seriesbc", "seriesc"];
+    if ((stageOrd[roundKey] ?? 99) <= (stageOrd[stageKey] ?? -1)) {
+      return rounds.find((r) => (stageOrd[r] ?? 99) > (stageOrd[stageKey] ?? -1)) || "seriesc";
+    }
+    return roundKey;
+  };
+  const defaultInputs = {
+    sh: Number(defaultShareholders),
+    oh: Number(defaultOptionHolders),
+    grNewHire: Number(defaultNewHireGrants),
+    grRefresh: Number(defaultRefreshGrants),
+    geoInc: mapCountry(defaultGeoInc),
+    geoOp: mapCountry(defaultGeoOp),
+    stage: mapStage(defaultStage),
+    meth: mapAdminMethod(defaultAdminMethod),
+    legalEntityName: defaultLegalEntity,
+    planningToFundraise: defaultFundraise,
+    fundraiseRound: snapFundraiseRound(mapStage(defaultStage), mapStage(defaultFundraiseRound)),
+    newShareholdersFromFundraise: Number(defaultNewShareholdersFromFundraise),
+    valuationFrequency: defaultValuation ? mapValFreq(defaultValFreq) : null,
+    valuationType: defaultValuation ? mapValType(defaultValType) : null,
+  };
 
   const [width, setWidth] = useState(1280);
-  const [formData, setFormData] = useState(null);
-  const [results, setResults] = useState(() => {
-    const defaultInputs = {
-      sh: Number(defaultShareholders),
-      oh: Number(defaultOptionHolders),
-      grNewHire: Number(defaultNewHireGrants),
-      grRefresh: Number(defaultRefreshGrants),
-      geoInc: mapCountry(defaultGeoInc),
-      geoOp: mapCountry(defaultGeoOp),
-      stage: mapStage(defaultStage),
-      meth: mapAdminMethod(defaultAdminMethod),
-      legalEntityName: defaultLegalEntity,
-      planningToFundraise: defaultFundraise,
-      fundraiseRound: mapStage(defaultFundraiseRound),
-      newShareholdersFromFundraise: Number(defaultNewShareholdersFromFundraise),
-      valuationFrequency: defaultValuation ? mapValFreq(defaultValFreq) : null,
-      valuationType: defaultValuation ? mapValType(defaultValType) : null,
-    };
-    return computeROI(defaultInputs);
-  });
+  const [formData, setFormData] = useState(defaultInputs);
+  const [results, setResults] = useState(() => computeROI(defaultInputs));
   const [mode, setMode] = useState("sample");
   const [errors, setErrors] = useState({});
   const [dirtyInputs, setDirtyInputs] = useState({});
@@ -2318,24 +2325,8 @@ export default function ROICalculator({
 
   // Sync results state when Webflow properties are updated
   useEffect(() => {
-    const defaultInputs = {
-      sh: Number(defaultShareholders),
-      oh: Number(defaultOptionHolders),
-      grNewHire: Number(defaultNewHireGrants),
-      grRefresh: Number(defaultRefreshGrants),
-      geoInc: mapCountry(defaultGeoInc),
-      geoOp: mapCountry(defaultGeoOp),
-      stage: mapStage(defaultStage),
-      meth: mapAdminMethod(defaultAdminMethod),
-      legalEntityName: defaultLegalEntity,
-      planningToFundraise: defaultFundraise,
-      fundraiseRound: mapStage(defaultFundraiseRound),
-      newShareholdersFromFundraise: Number(defaultNewShareholdersFromFundraise),
-      valuationFrequency: defaultValuation ? mapValFreq(defaultValFreq) : null,
-      valuationType: defaultValuation ? mapValType(defaultValType) : null,
-    };
     setResults(computeROI(defaultInputs));
-    setFormData(null);
+    setFormData(defaultInputs);
     setMode("sample");
     setDirtyInputs({});
     setErrors({});
@@ -2485,10 +2476,6 @@ export default function ROICalculator({
       setCurrentFormValues(currentFormData);
 
       if (formData) {
-        if (mode === "live") {
-          setMode("stale");
-        }
-
         // Track which specific fields have changed from last calculated values
         const newDirty = {};
         const fields = ["sh", "oh", "grNewHire", "grRefresh", "geoInc", "geoOp", "stage", "meth", "planningToFundraise", "fundraiseRound", "newShareholdersFromFundraise", "valuationFrequency", "valuationType"];
@@ -2506,6 +2493,17 @@ export default function ROICalculator({
           }
         });
         setDirtyInputs(newDirty);
+
+        // Only blur/go stale if something actually changed (avoids blurring on mount)
+        if (Object.keys(newDirty).length > 0 && (mode === "live" || mode === "sample")) {
+          setMode("stale");
+        }
+
+        // Clear edited rate/hours if method changed (they don't carry across methods)
+        if (currentFormData.meth !== formData.meth) {
+          setEditedRate(null);
+          setEditedHours(null);
+        }
       }
     }
   };
