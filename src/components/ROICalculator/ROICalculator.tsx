@@ -763,18 +763,31 @@ function ChipSelect({ value, onChange, options, mono = true }) {
       {options.map((o) => {
         const val = typeof o === "string" ? o : o.value;
         const label = typeof o === "string" ? o : o.label;
+        const disabled = typeof o === "object" && o.disabled;
         const sel = value === val;
         return (
-          <button key={val} onClick={() => onChange(val)} style={{
-            padding: "6px 12px", borderRadius: 999, cursor: "pointer",
-            border: `1px solid ${sel ? A.purple : A.line}`,
-            background: sel ? A.purple : "#fff", color: sel ? "#fff" : A.inkSoft,
-            fontFamily: A.sans,
-            fontSize: mono ? 11 : 13, fontWeight: 500,
-            letterSpacing: mono ? 0.4 : 0,
-            textTransform: mono ? "uppercase" : "none",
-            transition: "all .15s",
-          }}>{label}</button>
+          <button
+            key={val}
+            onClick={() => !disabled && onChange(val)}
+            disabled={disabled}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 999,
+              cursor: disabled ? "not-allowed" : "pointer",
+              border: `1px solid ${sel ? A.purple : A.line}`,
+              background: sel ? A.purple : "#fff",
+              color: sel ? "#fff" : A.inkSoft,
+              fontFamily: A.sans,
+              fontSize: mono ? 11 : 13,
+              fontWeight: 500,
+              letterSpacing: mono ? 0.4 : 0,
+              textTransform: mono ? "uppercase" : "none",
+              transition: "all .15s",
+              opacity: disabled ? 0.35 : 1,
+            }}
+          >
+            {label}
+          </button>
         );
       })}
     </div>
@@ -1096,7 +1109,14 @@ function AForm({
         <div className="form-grid-2">
           <Dropdown label="Country of Incorporation" value={geoInc} required error={errors?.geoInc} options={[{ value: "india", label: "India" }, { value: "us", label: "United States" }, { value: "singapore", label: "Singapore" }, { value: "uk", label: "United Kingdom" }]} onChange={(v) => { setGeoInc(v); onInputChange && onInputChange(); }} />
           <Dropdown label="Country of Operation" value={geoOp} required error={errors?.geoOp} options={[{ value: "india", label: "India" }, { value: "us", label: "United States" }, { value: "singapore", label: "Singapore" }, { value: "uk", label: "United Kingdom" }]} onChange={(v) => { setGeoOp(v); onInputChange && onInputChange(); }} />
-          <Dropdown label="Current Stage" value={stage} required error={errors?.stage} options={[{ value: "preseed", label: "Pre-seed" }, { value: "seed", label: "Seed" }, { value: "seriesab", label: "Series A/B" }, { value: "seriesbc", label: "Series B/C" }, { value: "seriesc", label: "Series C+" }]} onChange={(v) => { setStage(v); onInputChange && onInputChange(); }} />
+          <Dropdown label="Current Stage" value={stage} required error={errors?.stage} options={[{ value: "preseed", label: "Pre-seed" }, { value: "seed", label: "Seed" }, { value: "seriesab", label: "Series A/B" }, { value: "seriesbc", label: "Series B/C" }, { value: "seriesc", label: "Series C+" }]} onChange={(v) => {
+            setStage(v);
+            const stageOrd = { preseed: 0, seed: 1, seriesab: 2, seriesbc: 3, seriesc: 4 };
+            const rounds = ["preseed", "seed", "seriesab", "seriesbc", "seriesc"];
+            const nextRound = rounds.find(r => (stageOrd[r] ?? 99) > (stageOrd[v] ?? -1));
+            setFundraiseRound(nextRound || "seriesc");
+            onInputChange && onInputChange();
+          }} />
           <FormField label="Legal Entity Name" placeholder="e.g. Acme Corp Ltd." required value={legalEntity} onChange={(v) => { setLegalEntity(v); onInputChange && onInputChange(); }} error={errors?.legalEntityName} />
         </div>
       </FormSection>
@@ -1111,7 +1131,7 @@ function AForm({
 
         <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 16 }}>
           <SwitchCard on={fundraise} onChange={(v) => { setFundraise(v); onInputChange && onInputChange(); }} title="Planning to fundraise in the next 12 months?" subtitle="Helps us model upcoming governance & onboarding workflows.">
-            <FundraiseExpanded oneColumn={oneColumn} round={fundraiseRound} setRound={setFundraiseRound} shareholders={newShareholdersFromFundraise} setShareholders={setNewShareholdersFromFundraise} errors={errors} />
+            <FundraiseExpanded oneColumn={oneColumn} round={fundraiseRound} setRound={setFundraiseRound} currentStage={stage} shareholders={newShareholdersFromFundraise} setShareholders={setNewShareholdersFromFundraise} errors={errors} />
           </SwitchCard>
           <SwitchCard on={valuation} onChange={(v) => { setValuation(v); onInputChange && onInputChange(); }} title="Do you need valuation reports?" subtitle="Required for Options grant pricing, fundraising, and exit events.">
             <ValuationExpanded oneColumn={oneColumn} stage={stage} geoInc={geoInc} freq={valFreq} setFreq={(f) => { setValFreq(f); onInputChange && onInputChange(); }} type={valType} setType={(t) => { setValType(t); onInputChange && onInputChange(); }} errors={errors} />
@@ -1208,21 +1228,29 @@ function SwitchCard({ on, onChange, title, subtitle, children }) {
   );
 }
 
-function FundraiseExpanded({ oneColumn, round, setRound, shareholders, setShareholders, errors }) {
+function FundraiseExpanded({ oneColumn, round, setRound, currentStage, shareholders, setShareholders, errors }) {
   const [timing, setTiming] = useState("3–6 mo");
+  const stageOrder = { preseed: 0, seed: 1, seriesab: 2, seriesbc: 3, seriesc: 4 };
+  const currentStageIdx = stageOrder[currentStage] ?? -1;
+  const allRounds = [
+    { value: "preseed", label: "Pre-seed" },
+    { value: "seed", label: "Seed" },
+    { value: "seriesab", label: "Series A/B" },
+    { value: "seriesbc", label: "Series B/C" },
+    { value: "seriesc", label: "Series C+" },
+  ];
+  const roundOptions = allRounds.map((r) => ({
+    ...r,
+    disabled: (stageOrder[r.value] ?? 99) <= currentStageIdx && !(currentStage === "seriesc" && r.value === "seriesc"),
+  }));
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="form-grid-2">
         <div>
           <FormLabel>Round type</FormLabel>
           <div style={{ marginTop: 8 }}>
-            <ChipSelect value={round} onChange={setRound} options={[
-              { value: "preseed", label: "Pre-seed" },
-              { value: "seed", label: "Seed" },
-              { value: "seriesab", label: "Series A/B" },
-              { value: "seriesbc", label: "Series B/C" },
-              { value: "seriesc", label: "Series C+" },
-            ]} />
+            <ChipSelect value={round} onChange={setRound} options={roundOptions} />
           </div>
         </div>
         <div>
@@ -1234,6 +1262,9 @@ function FundraiseExpanded({ oneColumn, round, setRound, shareholders, setShareh
       </div>
       <div className="form-grid-shareholders">
         <FormField label="New shareholders" placeholder="e.g. 8" value={shareholders} onChange={setShareholders} type="number" required error={errors?.newShareholdersFromFundraise} onNumericError={() => {}} />
+        <div style={{ fontSize: 12, color: A.mute, lineHeight: 1.5, marginBottom: 8 }}>
+          Investors, SAFE conversions, and new ESOP grants all count toward stakeholder load.
+        </div>
       </div>
     </div>
   );
@@ -1716,6 +1747,11 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                       Apply
                     </button>
                   </span>
+                  {(editedRate === "" || editedHours === "") && (
+                    <span style={{ display: "block", fontSize: 11, color: A.redLight, marginTop: 8, fontFamily: A.sans }}>
+                      Enter a value in each field to apply.
+                    </span>
+                  )}
                 </span>
               )}
             </div>
@@ -1775,9 +1811,6 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
       display: "flex", flexDirection: "column", gap: 14,
       position: sticky ? "sticky" : "static", top: sticky ? 24 : undefined,
       width: "100%",
-      maxWidth: sticky ? undefined : 480,
-      marginLeft: sticky ? undefined : "auto",
-      marginRight: sticky ? undefined : "auto",
     }}>
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -1894,10 +1927,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                       type="text"
                       inputMode="numeric"
                       value={editedRate !== null ? editedRate : Math.round(v.rate)}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/[^\d]/g, "");
-                        setEditedRate(val);
-                      }}
+                      onChange={(e) => setEditedRate(e.target.value.replace(/[^\d]/g, ""))}
                       style={{
                         width: 60, textAlign: "right",
                         border: "none", borderBottom: `1px solid ${A.line}`,
@@ -1918,10 +1948,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                       type="text"
                       inputMode="numeric"
                       value={editedHours !== null ? editedHours : Math.round(v.manualHTotal)}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/[^\d]/g, "");
-                        setEditedHours(val);
-                      }}
+                      onChange={(e) => setEditedHours(e.target.value.replace(/[^\d]/g, ""))}
                       style={{
                         width: 60, textAlign: "right",
                         border: "none", borderBottom: `1px solid ${A.line}`,
@@ -1948,10 +1975,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                       type="text"
                       inputMode="numeric"
                       value={editedRate !== null ? editedRate : Math.round(v.methodExtCost)}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/[^\d]/g, "");
-                        setEditedRate(val);
-                      }}
+                      onChange={(e) => setEditedRate(e.target.value.replace(/[^\d]/g, ""))}
                       style={{
                         width: 60, textAlign: "right",
                         border: "none", borderBottom: `1px solid ${A.line}`,
@@ -1972,10 +1996,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                       type="text"
                       inputMode="numeric"
                       value={editedHours !== null ? editedHours : Math.round(v.manualHTotal * v.mult)}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/[^\d]/g, "");
-                        setEditedHours(val);
-                      }}
+                      onChange={(e) => setEditedHours(e.target.value.replace(/[^\d]/g, ""))}
                       style={{
                         width: 60, textAlign: "right",
                         border: "none", borderBottom: `1px solid ${A.line}`,
@@ -2048,6 +2069,11 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                 Apply
               </button>
             </span>
+            {(editedRate === "" || editedHours === "") && (
+              <span style={{ display: "block", fontSize: 11, color: A.redLight, marginTop: 8, fontFamily: A.sans }}>
+                Enter a value in each field to apply.
+              </span>
+            )}
           </span>
         )}
       </div>
@@ -2253,6 +2279,7 @@ export default function ROICalculator({
   const [editedRate, setEditedRate] = useState(null);
   const [editedHours, setEditedHours] = useState(null);
   const staticResultsRef = useRef(null);
+  const rootRef = useRef(null);
 
   // Sync results state when Webflow properties are updated
   useEffect(() => {
@@ -2368,11 +2395,57 @@ export default function ROICalculator({
       setFormData(validatedInputs);
       setMode("live");
       setDirtyInputs({});
+    } else {
+      setTimeout(() => {
+        if (rootRef.current) {
+          const firstErrorEl = rootRef.current.querySelector('[aria-invalid="true"]');
+          if (firstErrorEl) {
+            firstErrorEl.scrollIntoView({ behavior: "smooth", block: "center" });
+            if (firstErrorEl.focus) {
+              firstErrorEl.focus();
+            }
+          }
+        }
+      }, 50);
     }
   };
 
   const handleInputChange = (currentFormData) => {
     if (currentFormData) {
+      // Clear active validation error for any field that the user starts changing
+      const updatedErrors = { ...errors };
+      let errorsChanged = false;
+
+      const fieldToErrorKey = {
+        sh: "shareholders",
+        oh: "optionHolders",
+        grNewHire: "newHireGrants",
+        grRefresh: "refreshGrants",
+        geoInc: "geoInc",
+        geoOp: "geoOp",
+        stage: "stage",
+        meth: "meth",
+        legalEntityName: "legalEntityName",
+        fundraiseRound: "fundraiseRound",
+        newShareholdersFromFundraise: "newShareholdersFromFundraise",
+        valuationFrequency: "valuationFrequency",
+        valuationType: "valuationType",
+      };
+
+      Object.keys(fieldToErrorKey).forEach((field) => {
+        const errorKey = fieldToErrorKey[field];
+        if (currentFormData[field] !== currentFormValues[field]) {
+          if (updatedErrors[errorKey]) {
+            delete updatedErrors[errorKey];
+            errorsChanged = true;
+          }
+        }
+      });
+
+      if (errorsChanged) {
+        setErrors(updatedErrors);
+      }
+
       setCurrentFormValues(currentFormData);
 
       if (formData) {
@@ -2402,7 +2475,7 @@ export default function ROICalculator({
   };
 
   return (
-    <div className="roi-calculator-root" style={{
+    <div ref={rootRef} className="roi-calculator-root" style={{
       width: "100%",
       fontFamily: A.sans, color: A.ink, background: "#F6F5FE",
       WebkitFontSmoothing: "antialiased",
@@ -2412,7 +2485,7 @@ export default function ROICalculator({
 
       <div style={{
         maxWidth: 1280, margin: "0 auto",
-        padding: isMobile ? "16px 20px 140px" : "24px 40px 80px",
+        padding: isMobile ? "16px 20px 60px" : "24px 40px 80px",
       }} className="roi-grid">
         <AForm
           width={width}
@@ -2442,7 +2515,7 @@ export default function ROICalculator({
       </div>
 
       {isMobile && (
-        <div ref={staticResultsRef} id="roi-mobile-static-results" style={{ padding: "0 20px 40px", maxWidth: 1280, margin: "0 auto" }}>
+        <div ref={staticResultsRef} id="roi-mobile-static-results" style={{ padding: "0 20px 140px", maxWidth: 1280, margin: "0 auto" }}>
           <ALiveEstimate width={width - 40} mode={mode} results={results} onRecalculate={handleCalculate} dirtyCount={Object.keys(dirtyInputs).length} formData={formData} currentFormValues={currentFormValues} sticky={false} editedRate={editedRate} setEditedRate={setEditedRate} editedHours={editedHours} setEditedHours={setEditedHours} ctaText={ctaText} ctaUrl={ctaUrl} />
         </div>
       )}
