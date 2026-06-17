@@ -15,7 +15,7 @@ const A = {
   purpleBorder: "rgba(95, 70, 255, 0.2)",
   ink: "#0d0a40",
   inkSoft: "rgb(68,66,102)",
-  mute: "rgb(68,66,102)",
+  mute: "rgba(112, 109, 161, 1)",
   muteSoft: "#9B97AE",
   line: "#e0dff5",
   lineSoft: "#eeedf8",
@@ -29,10 +29,54 @@ const A = {
   amberLight: "#D97706",
   amberBg: "#FEF3C7",
   amberBorder: "#FDE68A",
-  // mono intentionally same as sans — all labels use Inter
   mono: '"Inter","SF Pro Text",-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
   sans: '"Inter","SF Pro Text",-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
-  serif: '"Fraunces","Tiempos Headline",Georgia,serif',
+  serif: '"Inter","SF Pro Text",-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
+
+  // ─── Centralized Style Guide ──────────────────────────────────────────────────
+  label: {
+    fontFamily: '"Inter","SF Pro Text",-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
+    fontSize: 12,
+    fontWeight: 500,
+    lineHeight: "20px",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: "rgba(13, 10, 64, 1)",
+  },
+  sectionHeader: {
+    title: {
+      fontFamily: '"Inter","SF Pro Text",-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
+      fontSize: 16,
+      fontWeight: 500,
+      lineHeight: "24px",
+      letterSpacing: 0,
+      color: "rgba(13, 10, 64, 1)",
+    },
+    subtitle: {
+      fontFamily: '"Inter","SF Pro Text",-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
+      fontSize: 12,
+      fontWeight: 400,
+      lineHeight: "16px",
+      letterSpacing: 0,
+      color: "rgba(112, 109, 161, 1)",
+    }
+  },
+  bodyText: {
+    fontFamily: '"Inter","SF Pro Text",-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
+    fontSize: 13,
+    fontWeight: 400,
+    lineHeight: "20px",
+    color: "rgba(68, 66, 102, 1)",
+  },
+  helperText: {
+    fontFamily: '"Inter","SF Pro Text",-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
+    fontSize: 10,
+    fontWeight: 400,
+    lineHeight: "14px",
+    letterSpacing: 0,
+    textTransform: "uppercase" as const,
+    color: "rgba(112, 109, 161, 1)",
+  }
 };
 
 // ─── Calculation Data ─────────────────────────────────────────────────────────
@@ -70,10 +114,27 @@ const STAGE_HOURLY_RATES = {
 };
 
 const STAGE_RETAINER = {
-  india: { preseed: 50000, seed: 80000, seriesab: 130000, seriesbc: 220000, seriesc: 350000 },
+  india: { preseed: 60000, seed: 90000, seriesab: 130000, seriesbc: 220000, seriesc: 350000 },
   us: { preseed: 6000, seed: 11000, seriesab: 18000, seriesbc: 35000, seriesc: 60000 },
-  singapore: { preseed: 7000, seed: 11000, seriesab: 15000, seriesbc: 28000, seriesc: 50000 },
+  singapore: { preseed: 10000, seed: 11000, seriesab: 15000, seriesbc: 28000, seriesc: 50000 },
   uk: { preseed: 4500, seed: 8000, seriesab: 12000, seriesbc: 22000, seriesc: 40000 },
+};
+
+// Stage-adjusted baselines for retainer scaling (Approach 2)
+const STAKEHOLDER_BASELINES = {
+  preseed: 15,
+  seed: 37,
+  seriesab: 75,
+  seriesbc: 148,
+  seriesc: 223,
+};
+
+const GRANT_BASELINES = {
+  preseed: 0,
+  seed: 6,
+  seriesab: 16,
+  seriesbc: 34,
+  seriesc: 48,
 };
 
 // Redesigned to represent actual time allocation percentages (sum to 1.0 per stage)
@@ -181,10 +242,10 @@ const CURRENCY_SYMBOLS = Object.fromEntries(Object.entries(GEO_CURRENCY_MAP).map
 const GEO_TO_CURRENCY = Object.fromEntries(Object.entries(GEO_CURRENCY_MAP).map(([k, v]) => [k, v.code]));
 
 // ─── Dynamic Compliance Hours (tiered by reports) ────────────────────────────
-function getDynamicComplianceHours(stage, shareholders, optionHolders, geoInc, newHireGrants = 0) {
+function getDynamicComplianceHours(stage, shareholders, optionHolders, geoInc, newHireGrants = 0, refreshGrants = 0) {
   const stageScale = { preseed: 0.5, seed: 0.75, seriesab: 1.0, seriesbc: 1.25, seriesc: 1.5 };
   const scale = stageScale[stage] || 1.0;
-  const totalGrants = newHireGrants + (parseInt(newHireGrants, 10) > 0 ? newHireGrants : 0);
+  const totalGrants = parseInt(newHireGrants, 10) + parseInt(refreshGrants, 10);
 
   const reportHours = (baseHrs, scalingFactor = 1) => baseHrs * scale * scalingFactor;
 
@@ -259,58 +320,93 @@ function computeROI(inputs, overrides = {}) {
     }
   }
 
-  const mult = meth === "in-house" ? 1 : 0.4;
+  const mult = meth === "in-house" ? 1 : 0.2;
   const grHr = overrides.grHr || 1.5;
-  const compHr = overrides.compHr || getDynamicComplianceHours(stageKey, sh, oh, geoInc, grNewHire);
+  const compHr = overrides.compHr || getDynamicComplianceHours(stageKey, sh, oh, geoInc, grNewHire, grRefresh);
 
   const grNewHireNum = parseInt(grNewHire, 10);
   const grRefreshNum = parseInt(grRefresh, 10);
   const totalGrantAdminWork = oh + grNewHireNum + grRefreshNum;
-  const grHrs = totalGrantAdminWork * grHr;
+
+  // Calculate adjusted hour values (will be set properly after originalHTotal is computed)
+  // For now, default to original values
+  let adjustedGrHr = grHr;
+  let adjustedCompHr = compHr;
+  let adjustedCtRaw = 0;  // Will be set after ctRaw is calculated
+  let adjustedCtFundraisingHours = 0;  // Will be set after ctFundraisingHours is calculated
+  let adjustedSecFundraisingRaw = 0;  // Will be set after secFundraisingRaw is calculated
+
+  const grHrs = totalGrantAdminWork * adjustedGrHr;
   const grCost = grHrs * mult * rate;
-  const cpCost = compHr * mult * rate;
+  const cpCost = adjustedCompHr * mult * rate;
 
   // === CAP TABLE MAINTENANCE ===
+  // Base: 3 hours/month (reconciliation, board updates, record-keeping)
+  // Scaling: +2 hours/month for every 50 shareholders above 20
+  // Per PRD lines 210-220: Cap table complexity grows non-linearly with shareholder count
   const CAP_TABLE_BASE_HOURS_PER_MONTH = 3;
   const CAP_TABLE_SCALING_INCREMENT = 2; // hours/month per each 50 shareholders above 20
   const ctShareholderScale = Math.max(0, (sh - 20) / 50);
-  const ctMonthlyHours = sh > 0 ? CAP_TABLE_BASE_HOURS_PER_MONTH + ctShareholderScale * CAP_TABLE_SCALING_INCREMENT : 0;
-  const ctRaw = ctMonthlyHours * 12;
-  const ctHrs = ctRaw * mult;
+  const ctMonthlyHours = sh > 0 ? CAP_TABLE_BASE_HOURS_PER_MONTH + (ctShareholderScale * CAP_TABLE_SCALING_INCREMENT) : 0;
+  const ctRaw = ctMonthlyHours * 12; // annualize
+  adjustedCtRaw = ctRaw;  // Will be overridden if hours are overridden
+  const ctHrs = adjustedCtRaw * mult;
   const ctCost = ctHrs * rate;
 
   const ROUND_COMPLEXITY = { preseed: 0.5, safe: 0.5, bridge: 0.75, seed: 1.0, seriesab: 1.5, seriesbc: 2.0, seriesc: 2.5 };
   const roundMultiplier = planningToFundraise ? (ROUND_COMPLEXITY[fundraiseRound] || 1.0) : 0;
 
   // === FUNDRAISING: CAP TABLE ===
+  // 3 workflows × 2.5 hours/workflow = 7.5 hours baseline
+  // Per PRD: "3 for cap table" workflows during fundraising
+  // "One workflow" = ~2.5 hours (documentation, approvals, shareholder communication)
   const HOURS_PER_WORKFLOW = 2.5;
-  const ctFundraisingBaseHours = FUNDRAISING_WORKFLOWS.capTable * HOURS_PER_WORKFLOW;
-  const ctFundraisingHours = planningToFundraise ? ctFundraisingBaseHours * roundMultiplier : 0;
-  const ctFundraisingHrs = ctFundraisingHours * mult;
+  const ctFundraisingBaseHours = FUNDRAISING_WORKFLOWS.capTable * HOURS_PER_WORKFLOW; // 3 × 2.5 = 7.5
+  const ctFundraisingHours = planningToFundraise ? (ctFundraisingBaseHours * roundMultiplier) : 0;
+  adjustedCtFundraisingHours = ctFundraisingHours;  // Will be overridden if hours are overridden
+  const ctFundraisingHrs = adjustedCtFundraisingHours * mult;
   const ctFundraisingCost = ctFundraisingHrs * rate;
 
   const secRate = STAGE_HOURLY_RATES[geoInc][stageKey].cs;
 
   // === FUNDRAISING: SECRETARIAL & BOARD ===
+  // 3 workflows × 2.5 hours/workflow = 7.5 hours baseline
+  // Workflows: (1) Board approvals, (2) Shareholder approvals, (3) Documentation coordination
+  // Scaled by shareholder count (more shareholders = more communication/coordination)
   const secFundraisingBaseWorkflows = planningToFundraise ? FUNDRAISING_WORKFLOWS.secretarial : 0;
-  const secFundraisingBaseHours = secFundraisingBaseWorkflows * HOURS_PER_WORKFLOW;
+  const secFundraisingBaseHours = secFundraisingBaseWorkflows * HOURS_PER_WORKFLOW; // 3 × 2.5 = 7.5
   const secFundraisingHours = secFundraisingBaseHours * roundMultiplier;
-  const effectiveShareholders = planningToFundraise ? sh + newShareholdersFromFundraise : sh;
+  const effectiveShareholders = planningToFundraise ? (sh + newShareholdersFromFundraise) : sh;
+  // Shareholder scaling: starts at 1.0 for ≤20 shareholders, increases 0.5% for every 100 shareholders above 20
   const secFundraisingScaling = 1 + Math.max(0, (effectiveShareholders - 20) / 100) * 0.5;
   const secFundraisingRaw = secFundraisingHours * secFundraisingScaling;
-  const secFundraisingHrs = secFundraisingRaw * mult;
+  adjustedSecFundraisingRaw = secFundraisingRaw;  // Will be overridden if hours are overridden
+  const secFundraisingHrs = adjustedSecFundraisingRaw * mult;
   const secFundraisingCost = secFundraisingHrs * secRate;
 
-  let methodExtCost = 0;
-  if (meth === "outsourced") {
-    methodExtCost = STAGE_RETAINER[geoInc][stageKey];
+  let methodExtCost = overrides.methodExtCost || 0;
+  if (meth === 'outsourced' && !overrides.methodExtCost) {
+    const baseRetainer = STAGE_RETAINER[geoInc][stageKey];
+
+    // Scale retainer based on complexity (Approach 2)
+    const totalStakeholders = sh + oh + parseInt(grNewHire, 10);
+    const stakeholderBaseline = STAKEHOLDER_BASELINES[stageKey];
+    const grantBaseline = GRANT_BASELINES[stageKey];
+
+    const shDenominator = stageKey === 'seriesc' ? 200 : 144;
+    const grDenominator = stageKey === 'seriesc' ? 50 : 37;
+    const stakeholderFactor = 1 + Math.max(0, totalStakeholders - stakeholderBaseline) / shDenominator;
+    const grantFactor = 1 + Math.max(0, grRefresh - grantBaseline) / grDenominator;
+    const fundraisingFactor = planningToFundraise ? 1.3 : 1.0;
+
+    methodExtCost = Math.round(baseRetainer * stakeholderFactor * grantFactor * fundraisingFactor);
   }
 
   let valuationCost = 0;
   let elValuationCost = 0;
   if (valuationFrequency && valuationType) {
-    const events = valuationFrequency === "annually" ? 1 : valuationFrequency === "quarterly" ? 4 : 0;
-    const opCurrency = GEO_TO_CURRENCY[geoInc] || "INR";
+    const events = valuationFrequency === 'annually' ? 1 : valuationFrequency === 'quarterly' ? 4 : 0;
+    const opCurrency = GEO_TO_CURRENCY[geoInc] || 'INR';
 
     const marketPricing = VALUATION_PRICING[valuationType]?.[stageKey];
     const elPricing = EL_VALUATION_PRICING[valuationType]?.[stageKey];
@@ -323,13 +419,39 @@ function computeROI(inputs, overrides = {}) {
     }
   }
 
-  const annCost = grCost + cpCost + ctCost + ctFundraisingCost + secFundraisingCost + methodExtCost + valuationCost;
-  const manualHTotal = overrides.manualHTotal || (totalGrantAdminWork * grHr + compHr + ctRaw + ctFundraisingHours + secFundraisingRaw);
+  let annCost = grCost + cpCost + ctCost + ctFundraisingCost + secFundraisingCost + methodExtCost + valuationCost;
+  const originalHTotal = totalGrantAdminWork * grHr + compHr + ctRaw + ctFundraisingHours + secFundraisingRaw;
+  const manualHTotal = overrides.manualHTotal || originalHTotal;
+
+  // If hours are overridden, recalculate adjusted hour values for each component
+  // This ensures fixed costs (like retainer) aren't scaled
+  if (overrides.manualHTotal && originalHTotal > 0) {
+    const hoursRatio = manualHTotal / originalHTotal;
+    adjustedGrHr = grHr * hoursRatio;
+    adjustedCompHr = compHr * hoursRatio;
+    adjustedCtRaw = ctRaw * hoursRatio;
+    adjustedCtFundraisingHours = ctFundraisingHours * hoursRatio;
+    adjustedSecFundraisingRaw = secFundraisingRaw * hoursRatio;
+
+    // Recalculate all cost components with adjusted hours
+    const newGrHrs = totalGrantAdminWork * adjustedGrHr;
+    const newGrCost = newGrHrs * mult * rate;
+    const newCpCost = adjustedCompHr * mult * rate;
+    const newCtHrs = adjustedCtRaw * mult;
+    const newCtCost = newCtHrs * rate;
+    const newCtFundraisingHrs = adjustedCtFundraisingHours * mult;
+    const newCtFundraisingCost = newCtFundraisingHrs * rate;
+    const newSecFundraisingHrs = adjustedSecFundraisingRaw * mult;
+    const newSecFundraisingCost = newSecFundraisingHrs * secRate;
+
+    // Recalculate total cost with adjusted components (retainer stays fixed)
+    annCost = newGrCost + newCpCost + newCtCost + newCtFundraisingCost + newSecFundraisingCost + methodExtCost + valuationCost;
+  }
+
   const adjustedHTotal = manualHTotal * mult;
   const hoursToday = adjustedHTotal;
   const hoursSaved = hoursToday;
   const timeSavedPct = hoursToday > 0 ? Math.round((hoursSaved / hoursToday) * 100) : 0;
-
   const stakeholders = Math.min(sh + oh + parseInt(grNewHire, 10), 10000);
   const elAnn = stakeholders * PRICING[geoInc] + elValuationCost;
 
@@ -373,33 +495,76 @@ function computeROI(inputs, overrides = {}) {
 }
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
-function MonoLabel({ children, size = 10.5, color, style }) {
+function MonoLabel({ children, size = 11, color, style }) {
   return (
-    <div style={{
-      fontFamily: A.mono, fontSize: size, fontWeight: 700, letterSpacing: 1.4,
+    <span style={{
+      fontFamily: A.sans, fontSize: size, fontWeight: 500, letterSpacing: 0.4,
       textTransform: "uppercase", color: color || A.mute,
-      display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap",
+      display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap",
+      verticalAlign: "middle",
       ...style,
-    }}>{children}</div>
+    }}>{children}</span>
+  );
+}
+
+function FormLabel({ children, required, error, style }) {
+  return (
+    <span style={{
+      fontFamily: A.label.fontFamily,
+      fontSize: A.label.fontSize,
+      fontWeight: A.label.fontWeight,
+      lineHeight: A.label.lineHeight,
+      letterSpacing: A.label.letterSpacing,
+      textTransform: A.label.textTransform,
+      color: error ? A.redLight : A.label.color,
+      display: "inline-flex",
+      alignItems: "center",
+      whiteSpace: "nowrap",
+      verticalAlign: "middle",
+      ...style,
+    }}>
+      {children}
+      {required && <span style={{ color: error ? A.redLight : A.purple, marginLeft: 3 }}>*</span>}
+    </span>
   );
 }
 
 function SectionHeader({ number, title, subtitle, style }) {
   return (
-    <div style={{ ...style }}>
-      <div style={{ marginBottom: 6 }}>
-        <span style={{ fontFamily: A.sans, fontSize: 15, fontWeight: 600, letterSpacing: -0.01, color: A.ink, lineHeight: 1.35 }}>
+    <span style={{ display: "block", ...style }}>
+      <span style={{ display: "block", marginBottom: 6 }}>
+        <span style={{
+          fontFamily: A.sectionHeader.title.fontFamily,
+          fontSize: A.sectionHeader.title.fontSize,
+          fontWeight: A.sectionHeader.title.fontWeight,
+          letterSpacing: A.sectionHeader.title.letterSpacing,
+          color: A.sectionHeader.title.color,
+          lineHeight: A.sectionHeader.title.lineHeight,
+          verticalAlign: "middle"
+        }}>
           {title}
         </span>
-      </div>
-      {subtitle && <div style={{ fontSize: 13.5, fontWeight: 300, color: A.inkSoft, lineHeight: 1.65 }}>{subtitle}</div>}
-    </div>
+      </span>
+      {subtitle && (
+        <span style={{
+          fontFamily: A.sectionHeader.subtitle.fontFamily,
+          fontSize: A.sectionHeader.subtitle.fontSize,
+          fontWeight: A.sectionHeader.subtitle.fontWeight,
+          color: A.sectionHeader.subtitle.color,
+          lineHeight: A.sectionHeader.subtitle.lineHeight,
+          letterSpacing: A.sectionHeader.subtitle.letterSpacing,
+          verticalAlign: "middle",
+          display: "block"
+        }}>
+          {subtitle}
+        </span>
+      )}
+    </span>
   );
 }
 
 function FormField({ label, value, onChange, placeholder, type = "text", required, suffix, error, helperText, onNumericError, disabled }) {
   const borderColor = error ? A.redLight : A.line;
-  const labelColor = error ? A.redLight : A.mute;
   const handleChange = (e) => {
     let val = e.target.value;
     let hasError = false;
@@ -417,9 +582,9 @@ function FormField({ label, value, onChange, placeholder, type = "text", require
   };
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      <MonoLabel color={labelColor}>
-        {label}{required && <span style={{ color: error ? A.redLight : A.purple, marginLeft: 3 }}>*</span>}
-      </MonoLabel>
+      <FormLabel error={error} required={required}>
+        {label}
+      </FormLabel>
       <div style={{ position: "relative", marginTop: 6, flex: 0 }}>
         <input
           type={type === "number" ? "text" : type}
@@ -433,7 +598,7 @@ function FormField({ label, value, onChange, placeholder, type = "text", require
             width: "100%", boxSizing: "border-box",
             border: "none", borderBottom: `1px solid ${disabled ? A.line : borderColor}`,
             padding: "8px 0", outline: "none",
-            background: disabled ? "rgba(232, 230, 240, 0.5)" : "transparent", fontFamily: A.sans, fontSize: 16, lineHeight: 1.4,
+            background: disabled ? "rgba(232, 230, 240, 0.5)" : "transparent", fontFamily: A.sans, fontSize: 14, lineHeight: 1.4,
             color: disabled ? "rgba(159, 153, 175, 0.6)" : A.ink, fontVariantNumeric: "tabular-nums",
             caretColor: error ? A.redLight : "auto",
             display: "block",
@@ -444,14 +609,14 @@ function FormField({ label, value, onChange, placeholder, type = "text", require
           onBlur={(e) => (e.currentTarget.style.borderBottomColor = borderColor)}
         />
         {suffix && (
-          <span style={{ position: "absolute", right: 0, top: 8, fontFamily: A.mono, fontSize: 11, color: A.muteSoft, fontWeight: 600 }}>{suffix}</span>
+          <span style={{ position: "absolute", right: 0, top: 8, fontFamily: A.sans, fontSize: 12, color: A.muteSoft, fontWeight: 500 }}>{suffix}</span>
         )}
       </div>
       <div style={{ minHeight: error || helperText ? "auto" : 22, marginTop: 6 }}>
         {error && (
           <div role="alert" style={{
             display: "flex", alignItems: "center", gap: 4,
-            fontFamily: A.mono, fontSize: 10, fontWeight: 600, letterSpacing: 0.4,
+            fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4,
             textTransform: "uppercase", color: A.redLight,
           }}>
             <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="5.5" cy="5.5" r="4.5"/><path d="M5.5 3v3M5.5 7.8v.2"/></svg>
@@ -459,12 +624,12 @@ function FormField({ label, value, onChange, placeholder, type = "text", require
           </div>
         )}
         {helperText && !error && (
-          <div style={{
-            fontFamily: A.mono, fontSize: 10, fontWeight: 600, letterSpacing: 0.4,
-            textTransform: "uppercase", color: A.mute,
+          <span style={{
+            ...A.helperText,
+            display: "block",
           }}>
             {helperText}
-          </div>
+          </span>
         )}
       </div>
     </div>
@@ -475,54 +640,102 @@ function Dropdown({ label, value, onChange, options, placeholder = "Select…", 
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
-    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    const onDoc = (e) => {
+      const path = e.composedPath ? e.composedPath() : [];
+      if (ref.current && !ref.current.contains(e.target) && !path.includes(ref.current)) {
+        setOpen(false);
+      }
+    };
+    const onScroll = (e) => {
+      if (ref.current && ref.current.contains(e.target)) {
+        return;
+      }
+      setOpen(false);
+    };
+    const onTouchMove = (e) => {
+      const path = e.composedPath ? e.composedPath() : [];
+      if (ref.current && !ref.current.contains(e.target) && !path.includes(ref.current)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", onDoc, true);
+    document.addEventListener("touchstart", onDoc, true);
+    window.addEventListener("touchmove", onTouchMove, { passive: true, capture: true });
+    window.addEventListener("scroll", onScroll, true);
+
+    return () => {
+      document.removeEventListener("mousedown", onDoc, true);
+      document.removeEventListener("touchstart", onDoc, true);
+      window.removeEventListener("touchmove", onTouchMove, true);
+      window.removeEventListener("scroll", onScroll, true);
+    };
   }, []);
   const sel = options.find((o) => (typeof o === "string" ? o : o.value) === value);
   const selLabel = sel ? (typeof sel === "string" ? sel : sel.label) : "";
   const borderColor = error ? A.redLight : open ? A.purple : A.line;
   return (
-    <div ref={ref} style={{ position: "relative" }}>
-      {label && <MonoLabel color={error ? A.redLight : A.mute}>{label}{required && <span style={{ color: error ? A.redLight : A.purple, marginLeft: 3 }}>*</span>}</MonoLabel>}
-      <button onClick={() => setOpen((o) => !o)} aria-invalid={error ? "true" : "false"} style={{
-        width: "100%", textAlign: "left", marginTop: label ? 6 : 0,
-        padding: "8px 0", background: "transparent",
-        border: "none", borderBottom: `1px solid ${borderColor}`,
-        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between",
-        fontFamily: A.sans, fontSize: 16, color: sel ? A.ink : A.muteSoft,
-        transition: "border-color .15s",
-      }}>
-        <span>{selLabel || placeholder}</span>
-        <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke={A.mute} strokeWidth="1.6" strokeLinecap="round" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
-          <path d="M2 4l3.5 3.5L9 4"/>
-        </svg>
-      </button>
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 30,
-          background: "#fff", border: `1px solid ${A.line}`, borderRadius: 6,
-          boxShadow: "0 8px 24px rgba(30,27,46,0.12)", padding: 4, maxHeight: 240, overflow: "auto",
+    <div ref={ref} style={{ display: "flex", flexDirection: "column" }}>
+      {label && <FormLabel error={error} required={required}>{label}</FormLabel>}
+      <div style={{ position: "relative", marginTop: label ? 6 : 0 }}>
+        <button onClick={() => setOpen((o) => !o)} aria-invalid={error ? "true" : "false"} style={{
+          width: "100%", textAlign: "left", padding: "8px 0", background: "transparent",
+          border: "none", borderBottom: `1px solid ${borderColor}`,
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between",
+          fontFamily: A.sans, fontSize: 14, lineHeight: 1.4, color: sel ? A.ink : A.muteSoft,
+          transition: "border-color .15s",
         }}>
-          {options.map((o) => {
-            const v = typeof o === "string" ? o : o.value;
-            const l = typeof o === "string" ? o : o.label;
-            const isSel = v === value;
-            return (
-              <button key={v} onClick={() => { onChange && onChange(v); setOpen(false); }} style={{
-                display: "block", width: "100%", textAlign: "left",
-                padding: "8px 10px", border: "none", cursor: "pointer",
-                background: isSel ? A.purpleTint : "transparent", borderRadius: 4,
-                fontFamily: "inherit", fontSize: 14, color: A.ink, fontWeight: isSel ? 600 : 500,
-              }}
-                onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = "#F7F6FA"; }}
-                onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
-              >{l}</button>
-            );
-          })}
-        </div>
-      )}
-      {error && <div style={{ marginTop: 6, fontSize: 12, color: A.redLight }}>{error}</div>}
+          <span>{selLabel || placeholder}</span>
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke={A.mute} strokeWidth="1.6" strokeLinecap="round" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
+            <path d="M2 4l3.5 3.5L9 4"/>
+          </svg>
+        </button>
+        {open && (
+          <div style={{
+            position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 30,
+            background: "#fff", border: `1px solid ${A.line}`, borderRadius: 6,
+            boxShadow: "0 8px 24px rgba(30,27,46,0.12)", padding: 4, maxHeight: 240, overflow: "auto",
+          }}>
+            {options.map((o) => {
+              const v = typeof o === "string" ? o : o.value;
+              const l = typeof o === "string" ? o : o.label;
+              const isSel = v === value;
+              return (
+                <button key={v}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange && onChange(v);
+                    setOpen(false);
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                  }}
+                  style={{
+                    display: "block", width: "100%", textAlign: "left",
+                    padding: "8px 10px", border: "none", cursor: "pointer",
+                    background: isSel ? A.purpleTint : "transparent", borderRadius: 6,
+                    fontFamily: "inherit", fontSize: 14, color: A.ink, fontWeight: isSel ? 600 : 500,
+                  }}
+                  onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = "#F7F6FA"; }}
+                  onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
+                >{l}</button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div style={{ minHeight: error ? "auto" : 22, marginTop: 6 }}>
+        {error && (
+          <div role="alert" style={{
+            display: "flex", alignItems: "center", gap: 4,
+            fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4,
+            textTransform: "uppercase", color: A.redLight,
+          }}>
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="5.5" cy="5.5" r="4.5"/><path d="M5.5 3v3M5.5 7.8v.2"/></svg>
+            {error}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -553,12 +766,12 @@ function ChipSelect({ value, onChange, options, mono = true }) {
         const sel = value === val;
         return (
           <button key={val} onClick={() => onChange(val)} style={{
-            padding: "6px 12px", borderRadius: 14, cursor: "pointer",
+            padding: "6px 12px", borderRadius: 999, cursor: "pointer",
             border: `1px solid ${sel ? A.purple : A.line}`,
             background: sel ? A.purple : "#fff", color: sel ? "#fff" : A.inkSoft,
-            fontFamily: mono ? A.mono : A.sans,
-            fontSize: mono ? 10.5 : 13, fontWeight: mono ? 700 : 500,
-            letterSpacing: mono ? 0.6 : 0,
+            fontFamily: A.sans,
+            fontSize: mono ? 11 : 13, fontWeight: 500,
+            letterSpacing: mono ? 0.4 : 0,
             textTransform: mono ? "uppercase" : "none",
             transition: "all .15s",
           }}>{label}</button>
@@ -573,9 +786,9 @@ function StatusChip({ mode, onEdit }) {
     return (
       <div style={{
         display: "inline-flex", alignItems: "center", gap: 8,
-        height: 26, borderRadius: 13, padding: "0 12px",
+        height: 26, borderRadius: 999, padding: "0 12px",
         background: A.greenTint, border: `1px solid rgba(10, 140, 92, 0.25)`,
-        fontFamily: A.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.8,
+        fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4,
         textTransform: "uppercase", color: A.green,
       }}>
         <span style={{ position: "relative", width: 7, height: 7 }}>
@@ -590,9 +803,9 @@ function StatusChip({ mode, onEdit }) {
     return (
       <div style={{
         display: "inline-flex", alignItems: "center", gap: 8,
-        height: 26, borderRadius: 13, padding: "0 12px",
+        height: 26, borderRadius: 999, padding: "0 12px",
         background: A.amberBg, border: `1px solid ${A.amberBorder}`,
-        fontFamily: A.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.8,
+        fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4,
         textTransform: "uppercase", color: A.amber,
       }}>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -605,31 +818,30 @@ function StatusChip({ mode, onEdit }) {
   }
   return (
     <div style={{
-      display: "inline-flex", alignItems: "stretch", height: 26, borderRadius: 13,
-      background: A.purpleTint, border: `1px solid ${A.purpleBorder}`, fontFamily: A.mono,
+      display: "inline-flex", alignItems: "stretch", height: 26, borderRadius: 999,
+      background: "#fff", border: `1px solid ${A.purple}`, fontFamily: A.sans,
     }}>
-      <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "0 10px 0 12px", color: A.purple2, fontSize: 10, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase" }}>
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "0 10px 0 12px", color: A.purple, fontSize: 11, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase" }}>
         <span style={{ position: "relative", width: 7, height: 7 }}>
           <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: A.purple, opacity: 0.3, animation: "roi-pulse 2.2s ease-out infinite" }} />
           <span style={{ position: "absolute", inset: 1.5, borderRadius: "50%", background: A.purple }} />
         </span>
         Sample
       </div>
-      <span style={{ width: 1, background: A.purpleBorder, margin: "6px 0" }} />
-      <button onClick={onEdit} style={{
+      <span style={{ width: 1, background: A.purple, margin: "6px 0" }} />
+      <button onClick={(e) => { e.stopPropagation(); onEdit && onEdit(e); }} style={{
         all: "unset", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4,
-        padding: "0 12px", color: A.purple, fontSize: 10, fontWeight: 700, letterSpacing: 0.8,
+        padding: "0 12px", color: A.purple, fontSize: 11, fontWeight: 500, letterSpacing: 0.4,
         textTransform: "uppercase", whiteSpace: "nowrap",
       }}>
         Edit inputs
-        <span style={{ fontSize: 11, opacity: 0.65, transition: "transform 0.15s", display: "inline-block" }}>▸</span>
       </button>
     </div>
   );
 }
 
 function PrimaryBtn({ children, fullWidth, onClick, size = "md", style, disabled, onMouseEnter, onMouseLeave }) {
-  const padding = size === "lg" ? "16px 28px" : size === "sm" ? "8px 14px" : "12px 22px";
+  const padding = "8px 16px";
   const fontSize = size === "lg" ? 15 : size === "sm" ? 12 : 14;
   const btnRef = useRef(null);
   return (
@@ -672,10 +884,24 @@ function InfoTip({ text, color }) {
 
   useEffect(() => {
     const handleDocumentClick = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      const path = e.composedPath ? e.composedPath() : [];
+      if (ref.current && !ref.current.contains(e.target) && !path.includes(ref.current)) {
+        setOpen(false);
+      }
     };
-    if (open) document.addEventListener("click", handleDocumentClick);
-    return () => document.removeEventListener("click", handleDocumentClick);
+    const handleScroll = () => {
+      setOpen(false);
+    };
+    if (open) {
+      document.addEventListener("click", handleDocumentClick, true);
+      document.addEventListener("touchstart", handleDocumentClick, true);
+      window.addEventListener("scroll", handleScroll, true);
+    }
+    return () => {
+      document.removeEventListener("click", handleDocumentClick, true);
+      document.removeEventListener("touchstart", handleDocumentClick, true);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -700,15 +926,16 @@ function InfoTip({ text, color }) {
         aria-label={`Information: ${text}`}
         aria-expanded={open}
         style={{
-          width: 15, height: 15, borderRadius: "50%",
-          border: `1px solid ${color || A.muteSoft}`, color: color || A.muteSoft,
+          width: 13.33, height: 13.33,
+          color: color || "rgba(13, 10, 64, 1)",
           display: "inline-flex", alignItems: "center", justifyContent: "center",
           cursor: "help", userSelect: "none", flexShrink: 0,
         }}
       >
-        <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ display: "block" }}>
-          <circle cx="4.5" cy="2" r="0.8" fill="currentColor"/>
-          <rect x="3.9" y="3.5" width="1.2" height="3.2" rx="0.6" fill="currentColor"/>
+        <svg width="13.33" height="13.33" viewBox="0 0 16 16" fill="none" style={{ display: "block" }}>
+          <path d="M7.99992 14.6663C11.6818 14.6663 14.6666 11.6816 14.6666 7.99967C14.6666 4.31778 11.6818 1.33301 7.99992 1.33301C4.31802 1.33301 1.33325 4.31778 1.33325 7.99967C1.33325 11.6816 4.31802 14.6663 7.99992 14.6663Z" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M8 10.6667V8" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M8 5.33301H8.00667" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       </span>
       {open && (
@@ -717,7 +944,7 @@ function InfoTip({ text, color }) {
           background: A.ink, color: "#fff",
           fontFamily: A.sans, fontSize: 11.5, fontWeight: 500, lineHeight: 1.45, letterSpacing: 0,
           textTransform: "none",
-          padding: "8px 10px", borderRadius: 5, maxWidth: 220, whiteSpace: "normal", wordWrap: "break-word", zIndex: 1000,
+          padding: "8px 10px", borderRadius: 6, maxWidth: 220, whiteSpace: "normal", wordWrap: "break-word", zIndex: 1000,
           boxShadow: "0 6px 18px rgba(20,18,30,0.22)", pointerEvents: "none",
         }}>
           {text}
@@ -728,30 +955,45 @@ function InfoTip({ text, color }) {
 }
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
-function AHero({ width, badgeText, titlePre, titleHighlight, titlePost, subtitle }) {
+function AHero({ width, titlePre, titleHighlight, titlePost, subtitle }) {
   const compact = width < 720;
   return (
     <section style={{
       padding: compact ? "32px 20px 20px" : "64px 40px 36px",
       maxWidth: 1280, margin: "0 auto",
     }}>
-      <div style={{ fontFamily: A.sans, fontSize: 11, fontWeight: 600, letterSpacing: 1.4, textTransform: "uppercase", color: A.purple, marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 8 }}>
-        <span style={{ width: 6, height: 6, borderRadius: 3, background: A.purple }} />
-        {badgeText}
-      </div>
       <h1 style={{
-        fontFamily: A.sans, fontSize: compact ? 28 : 52, fontWeight: 500, letterSpacing: compact ? -0.8 : -1.6,
-        color: A.ink, lineHeight: 1.05, margin: 0, maxWidth: 880, textWrap: "pretty",
+        fontFamily: '"Inter", sans-serif',
+        fontSize: compact ? 28 : 52,
+        fontWeight: 500,
+        letterSpacing: compact ? -0.8 : -1.12,
+        color: "rgba(13, 10, 64, 1)",
+        lineHeight: compact ? 1.15 : "64px",
+        verticalAlign: "middle",
+        margin: 0,
+        maxWidth: 880,
+        textWrap: "pretty",
       }}>
         {titlePre}{" "}
         <span style={{
-          fontFamily: A.sans, fontStyle: "normal", fontWeight: 500, color: "#5f46ff",
+          fontFamily: '"Inter", sans-serif',
+          fontStyle: "normal",
+          fontWeight: 500,
+          color: "#5f46ff",
         }}>{titleHighlight}</span>{" "}
         {titlePost}
       </h1>
       <p style={{
-        fontSize: compact ? 15 : 17, color: A.inkSoft, lineHeight: 1.5,
-        maxWidth: 620, marginTop: 20, marginBottom: 0,
+        fontFamily: '"Inter", sans-serif',
+        fontSize: compact ? 15 : 18,
+        fontWeight: 400,
+        letterSpacing: 0.2,
+        verticalAlign: "middle",
+        color: "rgba(68, 66, 102, 1)",
+        lineHeight: compact ? 1.4 : "28px",
+        maxWidth: 620,
+        marginTop: 20,
+        marginBottom: 0,
       }}>
         {subtitle}
       </p>
@@ -760,23 +1002,63 @@ function AHero({ width, badgeText, titlePre, titleHighlight, titlePost, subtitle
 }
 
 // ─── Form ─────────────────────────────────────────────────────────────────────
-function AForm({ width, onCalculate, onInputChange, errors, mode, editedRate, editedHours }) {
-  const [stage, setStage] = useState("seriesab");
-  const [shareholders, setShareholders] = useState("30");
-  const [optionHolders, setOptionHolders] = useState("15");
-  const [newHireGrants, setNewHireGrants] = useState("5");
-  const [refreshGrants, setRefreshGrants] = useState("5");
-  const [geoInc, setGeoInc] = useState("india");
-  const [geoOp, setGeoOp] = useState("india");
-  const [legalEntity, setLegalEntity] = useState("");
-  const [fundraise, setFundraise] = useState(false);
-  const [fundraiseRound, setFundraiseRound] = useState("seed");
-  const [newShareholdersFromFundraise, setNewShareholdersFromFundraise] = useState("0");
-  const [valuation, setValuation] = useState(false);
-  const [valFreq, setValFreq] = useState(null);
-  const [valType, setValType] = useState(null);
-  const [adminMethod, setAdminMethod] = useState("in-house");
+function AForm({
+  width,
+  onCalculate,
+  onInputChange,
+  errors,
+  mode,
+  editedRate,
+  editedHours,
+  defaultGeoInc = "india",
+  defaultGeoOp = "india",
+  defaultStage = "seriesab",
+  defaultLegalEntity = "",
+  defaultShareholders = "30",
+  defaultOptionHolders = "15",
+  defaultNewHireGrants = "5",
+  defaultRefreshGrants = "5",
+  defaultFundraise = false,
+  defaultFundraiseRound = "seed",
+  defaultNewShareholdersFromFundraise = "0",
+  defaultValuation = false,
+  defaultValFreq = null,
+  defaultValType = null,
+  defaultAdminMethod = "in-house",
+}) {
+  const [stage, setStage] = useState(defaultStage);
+  const [shareholders, setShareholders] = useState(defaultShareholders);
+  const [optionHolders, setOptionHolders] = useState(defaultOptionHolders);
+  const [newHireGrants, setNewHireGrants] = useState(defaultNewHireGrants);
+  const [refreshGrants, setRefreshGrants] = useState(defaultRefreshGrants);
+  const [geoInc, setGeoInc] = useState(defaultGeoInc);
+  const [geoOp, setGeoOp] = useState(defaultGeoOp);
+  const [legalEntity, setLegalEntity] = useState(defaultLegalEntity);
+  const [fundraise, setFundraise] = useState(defaultFundraise);
+  const [fundraiseRound, setFundraiseRound] = useState(defaultFundraiseRound);
+  const [newShareholdersFromFundraise, setNewShareholdersFromFundraise] = useState(defaultNewShareholdersFromFundraise);
+  const [valuation, setValuation] = useState(defaultValuation);
+  const [valFreq, setValFreq] = useState(defaultValFreq);
+  const [valType, setValType] = useState(defaultValType);
+  const [adminMethod, setAdminMethod] = useState(defaultAdminMethod);
   const [numericErrors, setNumericErrors] = useState({});
+
+  // Sync form state when Webflow default props change
+  useEffect(() => { setStage(defaultStage); }, [defaultStage]);
+  useEffect(() => { setShareholders(defaultShareholders); }, [defaultShareholders]);
+  useEffect(() => { setOptionHolders(defaultOptionHolders); }, [defaultOptionHolders]);
+  useEffect(() => { setNewHireGrants(defaultNewHireGrants); }, [defaultNewHireGrants]);
+  useEffect(() => { setRefreshGrants(defaultRefreshGrants); }, [defaultRefreshGrants]);
+  useEffect(() => { setGeoInc(defaultGeoInc); }, [defaultGeoInc]);
+  useEffect(() => { setGeoOp(defaultGeoOp); }, [defaultGeoOp]);
+  useEffect(() => { setLegalEntity(defaultLegalEntity); }, [defaultLegalEntity]);
+  useEffect(() => { setFundraise(defaultFundraise); }, [defaultFundraise]);
+  useEffect(() => { setFundraiseRound(defaultFundraiseRound); }, [defaultFundraiseRound]);
+  useEffect(() => { setNewShareholdersFromFundraise(defaultNewShareholdersFromFundraise); }, [defaultNewShareholdersFromFundraise]);
+  useEffect(() => { setValuation(defaultValuation); }, [defaultValuation]);
+  useEffect(() => { setValFreq(defaultValFreq); }, [defaultValFreq]);
+  useEffect(() => { setValType(defaultValType); }, [defaultValType]);
+  useEffect(() => { setAdminMethod(defaultAdminMethod); }, [defaultAdminMethod]);
 
   const oneColumn = width < 720;
 
@@ -831,7 +1113,7 @@ function AForm({ width, onCalculate, onInputChange, errors, mode, editedRate, ed
           <SwitchCard on={fundraise} onChange={(v) => { setFundraise(v); onInputChange && onInputChange(); }} title="Planning to fundraise in the next 12 months?" subtitle="Helps us model upcoming governance & onboarding workflows.">
             <FundraiseExpanded oneColumn={oneColumn} round={fundraiseRound} setRound={setFundraiseRound} shareholders={newShareholdersFromFundraise} setShareholders={setNewShareholdersFromFundraise} errors={errors} />
           </SwitchCard>
-          <SwitchCard on={valuation} onChange={(v) => { setValuation(v); onInputChange && onInputChange(); }} title="Do you need valuation reports?" subtitle="Required for ESOP grant pricing, fundraising, and exit events.">
+          <SwitchCard on={valuation} onChange={(v) => { setValuation(v); onInputChange && onInputChange(); }} title="Do you need valuation reports?" subtitle="Required for Options grant pricing, fundraising, and exit events.">
             <ValuationExpanded oneColumn={oneColumn} stage={stage} geoInc={geoInc} freq={valFreq} setFreq={(f) => { setValFreq(f); onInputChange && onInputChange(); }} type={valType} setType={(t) => { setValType(t); onInputChange && onInputChange(); }} errors={errors} />
           </SwitchCard>
         </div>
@@ -841,7 +1123,7 @@ function AForm({ width, onCalculate, onInputChange, errors, mode, editedRate, ed
         <Dropdown label="Administrative Method" value={adminMethod} required error={errors?.meth} options={[{ value: "in-house", label: "In-house (Spreadsheets)" }, { value: "outsourced", label: "Outsourced (CA/Law Firm)" }]} onChange={(v) => { setAdminMethod(v); onInputChange && onInputChange(); }} />
       </FormSection>
 
-      <PrimaryBtn fullWidth size="lg" onClick={() => {
+      <PrimaryBtn size="lg" fullWidth style={{ padding: "8px 16px" }} onClick={() => {
         const overrides = {};
         if (editedRate !== null && editedRate !== "") {
           overrides.rate = parseInt(editedRate, 10);
@@ -852,7 +1134,7 @@ function AForm({ width, onCalculate, onInputChange, errors, mode, editedRate, ed
         onCalculate && onCalculate({ sh: shareholders, oh: optionHolders, grNewHire: newHireGrants, grRefresh: refreshGrants, geoInc, geoOp, stage, meth: adminMethod, legalEntityName: legalEntity, planningToFundraise: fundraise, fundraiseRound, newShareholdersFromFundraise: parseInt(newShareholdersFromFundraise, 10) || 0, valuation, valuationFrequency: valuation ? valFreq : null, valuationType: valuation ? valType : null }, overrides);
       }}>
         Calculate ROI
-        <span className="btn-arr-icon" style={{ fontSize: 14, opacity: 0.65, transition: "transform 0.15s", display: "inline-block" }}>▸</span>
+        <svg className="btn-arr-icon" width="16" height="16" viewBox="0 0 19 19" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "inline-block", transition: "transform 0.15s" }}><g opacity="0.6"><path d="M13.5333 9.33379L7 5.13379V13.5338L13.5333 9.33379Z" fill="white" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></g></svg>
       </PrimaryBtn>
     </div>
   );
@@ -887,14 +1169,31 @@ function SwitchCard({ on, onChange, title, subtitle, children }) {
     }}>
       <label style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", cursor: "pointer" }}>
         <Switch on={on} onChange={onChange} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 600, color: A.ink, letterSpacing: -0.1 }}>{title}</div>
-          <div style={{ fontSize: 12, color: A.mute, marginTop: 2 }}>{subtitle}</div>
-        </div>
-        <div style={{
-          fontFamily: A.mono, fontSize: 9.5, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase",
-          color: on ? A.purple2 : A.muteSoft,
-        }}>{on ? "Yes" : "No"}</div>
+        <span style={{ flex: 1, minWidth: 0, display: "block" }}>
+          <span style={{
+            fontFamily: A.sectionHeader.title.fontFamily,
+            fontSize: A.sectionHeader.title.fontSize,
+            fontWeight: A.sectionHeader.title.fontWeight,
+            lineHeight: A.sectionHeader.title.lineHeight,
+            color: A.sectionHeader.title.color,
+            display: "block",
+            letterSpacing: A.sectionHeader.title.letterSpacing,
+          }}>{title}</span>
+          <span style={{
+            fontFamily: A.sectionHeader.subtitle.fontFamily,
+            fontSize: A.sectionHeader.subtitle.fontSize,
+            fontWeight: A.sectionHeader.subtitle.fontWeight,
+            color: A.sectionHeader.subtitle.color,
+            lineHeight: A.sectionHeader.subtitle.lineHeight,
+            display: "block",
+            marginTop: 2,
+            letterSpacing: A.sectionHeader.subtitle.letterSpacing,
+          }}>{subtitle}</span>
+        </span>
+        <span style={{
+          fontFamily: A.sans, fontSize: 12, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase",
+          color: on ? A.purple2 : A.muteSoft, display: "inline-flex", alignItems: "center",
+        }}>{on ? "Yes" : "No"}</span>
       </label>
       <div style={{
         maxHeight: on ? 600 : 0,
@@ -915,7 +1214,7 @@ function FundraiseExpanded({ oneColumn, round, setRound, shareholders, setShareh
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="form-grid-2">
         <div>
-          <MonoLabel>Round type</MonoLabel>
+          <FormLabel>Round type</FormLabel>
           <div style={{ marginTop: 8 }}>
             <ChipSelect value={round} onChange={setRound} options={[
               { value: "preseed", label: "Pre-seed" },
@@ -927,7 +1226,7 @@ function FundraiseExpanded({ oneColumn, round, setRound, shareholders, setShareh
           </div>
         </div>
         <div>
-          <MonoLabel>Expected timing</MonoLabel>
+          <FormLabel>Expected timing</FormLabel>
           <div style={{ marginTop: 8 }}>
             <ChipSelect value={timing} onChange={setTiming} options={["<3 mo", "3–6 mo", "6–12 mo"]} />
           </div>
@@ -935,9 +1234,6 @@ function FundraiseExpanded({ oneColumn, round, setRound, shareholders, setShareh
       </div>
       <div className="form-grid-shareholders">
         <FormField label="New shareholders" placeholder="e.g. 8" value={shareholders} onChange={setShareholders} type="number" required error={errors?.newShareholdersFromFundraise} onNumericError={() => {}} />
-        <div style={{ fontSize: 12, color: A.mute, lineHeight: 1.5 }}>
-          Investors, SAFE conversions, and new ESOP grants all count toward stakeholder load.
-        </div>
       </div>
     </div>
   );
@@ -979,7 +1275,7 @@ function ValuationExpanded({ oneColumn, stage, geoInc, freq, setFreq, type, setT
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke={A.purple} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
             <path d="M2 12L6 8l3 3 5-6"/><path d="M10 5h4v4"/>
           </svg>
-          Estimate will include <strong style={{ color: A.purple2, fontWeight: 700 }}>&nbsp;{events} event{events === 1 ? "" : "s"}/yr</strong>.
+          Estimate will include <strong style={{ color: A.purple2, fontWeight: 600 }}>&nbsp;{events} event{events === 1 ? "" : "s"}/yr</strong>.
         </div>
       )}
     </div>
@@ -989,7 +1285,7 @@ function ValuationExpanded({ oneColumn, stage, geoInc, freq, setFreq, type, setT
 function StaleAlert({ dirtyCount, onRecalculate }) {
   return (
     <div className="stale-alert" style={{
-      background: A.amberBg, border: `1px solid ${A.amberBorder}`, borderRadius: 10, padding: "14px 16px",
+      background: A.amberBg, border: `1px solid ${A.amberBorder}`, borderRadius: 8, padding: "14px 16px",
       display: "flex", alignItems: "center", gap: 12,
       margin: "12px 0 24px",
     }} role="status" aria-live="polite">
@@ -997,14 +1293,14 @@ function StaleAlert({ dirtyCount, onRecalculate }) {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={A.amber} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="amber-spin" style={{ flexShrink: 0 }}>
           <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
         </svg>
-        <div>
-          <div style={{ fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.amber }}>
+        <span style={{ display: "block" }}>
+          <span style={{ fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.amber, display: "block" }}>
             Showing previous results.
-          </div>
-          <div style={{ fontFamily: A.sans, fontSize: 14, fontWeight: 400, color: A.amber, marginTop: 2 }}>
+          </span>
+          <span style={{ fontFamily: A.sans, fontSize: 14, fontWeight: 400, color: A.amber, marginTop: 2, display: "block" }}>
             {dirtyCount} input{dirtyCount === 1 ? "" : "s"} ha{dirtyCount === 1 ? "s" : "ve"} changed.
-          </div>
-        </div>
+          </span>
+        </span>
       </div>
       <PrimaryBtn size="sm" onClick={onRecalculate} style={{ background: A.amber, whiteSpace: "nowrap" }} onMouseEnter={(e) => (e.currentTarget.style.background = A.amberLight)} onMouseLeave={(e) => (e.currentTarget.style.background = A.amber)}>
         Recalculate ▸
@@ -1014,10 +1310,11 @@ function StaleAlert({ dirtyCount, onRecalculate }) {
 }
 
 // ─── Live Estimate Panel ──────────────────────────────────────────────────────
-function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formData, currentFormValues, sticky = true, editedRate, setEditedRate, editedHours, setEditedHours, ctaText = "Book a demo", ctaUrl = "https://www.equitylist.co/contact" }) {
+function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formData, currentFormValues, sticky = true, editedRate, setEditedRate, editedHours, setEditedHours, ctaText = "Book a demo", ctaUrl = "https://www.equitylist.co/contact", isMobileLayout = false, showSticky = true }) {
   const compact = width < 460;
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [leavingStale, setLeavingStale] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState(false);
   const recalcFormValues = currentFormValues || formData;
 
   const formatStage = (stage) => {
@@ -1141,10 +1438,346 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
     }] : []),
   ];
 
+  if (isMobileLayout) {
+    return (
+      <div style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        background: "#fff",
+        boxShadow: "0 -8px 32px rgba(13, 20, 37, 0.12)",
+        borderTop: `1px solid ${A.line}`,
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        padding: "16px 20px 24px",
+        maxHeight: "85vh",
+        overflowY: "auto" as const,
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        boxSizing: "border-box",
+        transition: "transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)",
+        transform: showSticky ? "translateY(0)" : "translateY(100%)",
+      }}>
+        {/* Collapsed / Expandable Header Tab */}
+        <div 
+          onClick={() => setMobileExpanded(!mobileExpanded)}
+          style={{ cursor: "pointer", paddingBottom: 4 }}
+        >
+          {/* Grey drag-pill handle */}
+          <span style={{ width: 36, height: 4, background: A.line, borderRadius: 2, display: "block", margin: "0 auto 10px auto" }} />
+          
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 12 }}>
+            {/* Left Side: Labels & Price */}
+            <div>
+              <span style={{ fontFamily: A.sans, fontSize: 10, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase", color: A.mute, display: "block" }}>
+                {v.diff < 0 ? "Estimated cost increase" : "Potential savings"}
+              </span>
+              <span style={{
+                fontFamily: A.sans,
+                fontSize: 22,
+                fontWeight: 600,
+                color: v.diff < 0 ? A.red : A.green,
+                fontVariantNumeric: "tabular-nums",
+                display: "block",
+                marginTop: 2,
+                letterSpacing: "-0.4px",
+              }}>
+                {opCurrencySymbol}{(v.diff < 0 ? Math.abs(v.diff) : v.diff || 0).toLocaleString(opLocale)}
+                <span style={{ fontSize: 13, color: A.mute, fontWeight: 400, letterSpacing: 0 }}> / yr</span>
+              </span>
+            </div>
+
+            {/* Right Side: Status Chip & View Details Action */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+              <StatusChip mode={mode} onEdit={() => {
+                onRecalculate && onRecalculate({ sh: formData?.sh, oh: formData?.oh, grNewHire: formData?.grNewHire, grRefresh: formData?.grRefresh, geoInc: formData?.geoInc, geoOp: formData?.geoOp, stage: formData?.stage, meth: formData?.meth, planningToFundraise: formData?.planningToFundraise, fundraiseRound: formData?.fundraiseRound, newShareholdersFromFundraise: formData?.newShareholdersFromFundraise, valuationFrequency: formData?.valuationFrequency, valuationType: formData?.valuationType });
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }} />
+              <span style={{
+                fontFamily: A.sans, fontSize: 11, fontWeight: 600, color: A.purple,
+                display: "inline-flex", alignItems: "center", gap: 4,
+                textTransform: "uppercase", letterSpacing: 0.2
+              }}>
+                {mobileExpanded ? "Collapse Details ▾" : "View Details ▴"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Expanded Sheet Content */}
+        {mobileExpanded && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 4, borderTop: `1px solid ${A.lineSoft}`, paddingTop: 14 }}>
+            <span style={{
+              fontFamily: A.sectionHeader.subtitle.fontFamily,
+              fontSize: A.sectionHeader.subtitle.fontSize,
+              fontWeight: A.sectionHeader.subtitle.fontWeight,
+              color: A.sectionHeader.subtitle.color,
+              lineHeight: A.sectionHeader.subtitle.lineHeight,
+              letterSpacing: A.sectionHeader.subtitle.letterSpacing,
+              display: "block",
+            }}>
+              {mode === "live" ? "Tailored to your inputs. Recalculate any time." : mode === "stale" ? "Previous results. Update and recalculate." : "Illustrative, based on a typical mid-market scenario."}
+            </span>
+
+            {mode === "stale" && <StaleAlert dirtyCount={dirtyCount} onRecalculate={() => onRecalculate && onRecalculate(recalcFormValues)} />}
+
+            {/* Price comparisons block */}
+            <div className={mode === "stale" ? "panel-body--stale" : ""} style={{
+              background: "#fff", border: `1px solid ${A.line}`, borderRadius: 8,
+              padding: "16px 20px", position: "relative", overflow: "hidden",
+            }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                  <span style={{ fontFamily: A.sans, fontSize: 13, fontWeight: 500, color: A.ink }}>Current spend</span>
+                  <span style={{ fontFamily: A.sans, fontSize: 13, fontWeight: 500, color: A.inkSoft, fontVariantNumeric: "tabular-nums" }}>{opCurrencySymbol}{(v.annCost || 0).toLocaleString(opLocale)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                  <span style={{ fontFamily: A.sans, fontSize: 13, fontWeight: 500, color: A.ink }}>With EquityList</span>
+                  <span style={{ fontFamily: A.sans, fontSize: 13, fontWeight: 500, color: A.purple, fontVariantNumeric: "tabular-nums" }}>{opCurrencySymbol}{(v.elAnn || 0).toLocaleString(opLocale)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Cost Breakdown */}
+            <div className={mode === "stale" ? "panel-body--stale" : ""} style={{ background: "#fff", border: `1px solid ${A.line}`, borderRadius: 8 }}>
+              <button
+                onClick={() => setBreakdownOpen((o) => !o)}
+                aria-expanded={breakdownOpen}
+                style={{
+                  width: "100%", background: "transparent", border: "none", cursor: "pointer",
+                  padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between",
+                  borderBottom: breakdownOpen ? `1px solid ${A.lineSoft}` : "none",
+                }}
+              >
+                <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "24px", letterSpacing: 0.4, textTransform: "uppercase", color: A.ink, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", verticalAlign: "middle" }}>Cost breakdown</span>
+                <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke={A.mute} strokeWidth="1.6" strokeLinecap="round" style={{ transform: breakdownOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
+                  <path d="M2 4l3.5 3.5L9 4"/>
+                </svg>
+              </button>
+              {breakdownOpen && (
+                <div style={{ padding: "4px 18px 18px" }}>
+                  {items.map((it, i) => (
+                    <div key={it.key} style={{
+                      padding: "10px 0",
+                      borderBottom: i < items.length - 1 ? `1px solid ${A.lineSoft}` : "none",
+                    }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                        <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0.4, textTransform: "uppercase", color: A.ink }}>{it.label}</span>
+                        {it.tip && <InfoTip text={it.tip} />}
+                      </span>
+                      <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 400, lineHeight: "16px", color: A.mute, marginBottom: 6, wordBreak: "break-word", display: "block" }}>{it.formula}</span>
+                      <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ fontFamily: A.sans, fontSize: 13, fontWeight: 500, color: A.ink, fontVariantNumeric: "tabular-nums" }}>{it.value}</span>
+                        <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums" }}>{it.pct}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {breakdownOpen && (
+                <span style={{ display: "block", padding: "12px 18px 18px", borderTop: `1px solid ${A.lineSoft}`, marginTop: 12 }}>
+                  <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0.4, textTransform: "uppercase", color: A.ink, display: "block", marginBottom: 12 }}>Assumptions</span>
+                  
+                  {recalcFormValues?.meth === "in-house" && (
+                    <>
+                      <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+                        <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase", color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Blended hourly rate</span>
+                        <span style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "flex-end", flexShrink: 0 }}>
+                          <span style={{ width: 12, display: "inline-block", textAlign: "right", fontFamily: A.sans, fontSize: 14, fontWeight: 500, color: A.mute }}>{opCurrencySymbol}</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={editedRate !== null ? editedRate : Math.round(v.rate)}
+                            onChange={(e) => setEditedRate(e.target.value.replace(/[^\d]/g, ""))}
+                            style={{
+                              width: 60, textAlign: "right",
+                              border: "none", borderBottom: `1px solid ${A.line}`,
+                              padding: "4px 0", outline: "none", background: "transparent",
+                              fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums",
+                            }}
+                            onFocus={(e) => (e.currentTarget.style.borderBottomColor = A.purple)}
+                            onBlur={(e) => (e.currentTarget.style.borderBottomColor = A.line)}
+                          />
+                          <span style={{ width: 72, display: "inline-block", fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase", color: A.muteSoft, whiteSpace: "nowrap" }}>{formatStage(v.stage)}</span>
+                        </span>
+                      </span>
+                      <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+                        <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase", color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Total equity management hours</span>
+                        <span style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "flex-end", flexShrink: 0 }}>
+                          <span style={{ width: 12, display: "inline-block" }} />
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={editedHours !== null ? editedHours : Math.round(v.manualHTotal)}
+                            onChange={(e) => setEditedHours(e.target.value.replace(/[^\d]/g, ""))}
+                            style={{
+                              width: 60, textAlign: "right",
+                              border: "none", borderBottom: `1px solid ${A.line}`,
+                              padding: "4px 0", outline: "none", background: "transparent",
+                              fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums",
+                            }}
+                            onFocus={(e) => (e.currentTarget.style.borderBottomColor = A.purple)}
+                            onBlur={(e) => (e.currentTarget.style.borderBottomColor = A.line)}
+                          />
+                          <span style={{ width: 72, display: "inline-block", fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase", color: A.muteSoft, whiteSpace: "nowrap" }}>HRS/YR</span>
+                        </span>
+                      </span>
+                    </>
+                  )}
+
+                  {recalcFormValues?.meth === "outsourced" && (
+                    <>
+                      <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+                        <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase", color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Retainer cost</span>
+                        <span style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "flex-end", flexShrink: 0 }}>
+                          <span style={{ width: 12, display: "inline-block", textAlign: "right", fontFamily: A.sans, fontSize: 14, fontWeight: 500, color: A.mute }}>{opCurrencySymbol}</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={editedRate !== null ? editedRate : Math.round(v.methodExtCost)}
+                            onChange={(e) => setEditedRate(e.target.value.replace(/[^\d]/g, ""))}
+                            style={{
+                              width: 60, textAlign: "right",
+                              border: "none", borderBottom: `1px solid ${A.line}`,
+                              padding: "4px 0", outline: "none", background: "transparent",
+                              fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums",
+                            }}
+                            onFocus={(e) => (e.currentTarget.style.borderBottomColor = A.purple)}
+                            onBlur={(e) => (e.currentTarget.style.borderBottomColor = A.line)}
+                          />
+                          <span style={{ width: 72, display: "inline-block", fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase", color: A.muteSoft, whiteSpace: "nowrap" }}>/YR</span>
+                        </span>
+                      </span>
+                      <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+                        <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase", color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Internal effort hours</span>
+                        <span style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "flex-end", flexShrink: 0 }}>
+                          <span style={{ width: 12, display: "inline-block" }} />
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={editedHours !== null ? editedHours : Math.round(v.manualHTotal * v.mult)}
+                            onChange={(e) => setEditedHours(e.target.value.replace(/[^\d]/g, ""))}
+                            style={{
+                              width: 60, textAlign: "right",
+                              border: "none", borderBottom: `1px solid ${A.line}`,
+                              padding: "4px 0", outline: "none", background: "transparent",
+                              fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums",
+                            }}
+                            onFocus={(e) => (e.currentTarget.style.borderBottomColor = A.purple)}
+                            onBlur={(e) => (e.currentTarget.style.borderBottomColor = A.line)}
+                          />
+                          <span style={{ width: 72, display: "inline-block", fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase", color: A.muteSoft, whiteSpace: "nowrap" }}>HRS/YR</span>
+                        </span>
+                      </span>
+                    </>
+                  )}
+
+                  <span style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                    <button
+                      onClick={() => {
+                        setEditedRate(null);
+                        setEditedHours(null);
+                        setLeavingStale(true);
+                        onRecalculate && onRecalculate(recalcFormValues, {});
+                      }}
+                      style={{ flex: 1, padding: "8px 16px", background: A.lineSoft, color: A.ink, border: `1px solid ${A.line}`, borderRadius: 8, fontFamily: A.sans, fontSize: 14, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}
+                    >
+                      Reset
+                    </button>
+                    <button
+                      disabled={editedRate === "" || editedHours === ""}
+                      onClick={() => {
+                        if (editedRate === "" || editedHours === "") return;
+                        const overrides = {};
+                        let hasChanges = false;
+                        if (editedRate !== null && editedRate !== "") {
+                          const rateVal = parseInt(editedRate, 10);
+                          if (recalcFormValues?.meth === "outsourced") {
+                            if (rateVal !== Math.round(v.methodExtCost)) { overrides.methodExtCost = rateVal; hasChanges = true; }
+                          } else {
+                            if (rateVal !== Math.round(v.rate)) { overrides.rate = rateVal; hasChanges = true; }
+                          }
+                        }
+                        if (editedHours !== null && editedHours !== "") {
+                          const hoursVal = parseInt(editedHours, 10);
+                          const compareHours = recalcFormValues?.meth === "outsourced" ? Math.round(v.manualHTotal * v.mult) : Math.round(v.manualHTotal);
+                          if (hoursVal !== compareHours) { overrides.manualHTotal = hoursVal; hasChanges = true; }
+                        }
+                        if (hasChanges) {
+                          setLeavingStale(true);
+                          onRecalculate && onRecalculate(recalcFormValues, overrides);
+                        }
+                      }}
+                      style={{ flex: 1, padding: "8px 16px", background: (editedRate === "" || editedHours === "") ? A.line : A.purple, color: (editedRate === "" || editedHours === "") ? A.muteSoft : "#fff", border: "none", borderRadius: 8, fontFamily: A.sans, fontSize: 14, fontWeight: 600, cursor: (editedRate === "" || editedHours === "") ? "not-allowed" : "pointer" }}
+                    >
+                      Apply
+                    </button>
+                  </span>
+                </span>
+              )}
+            </div>
+
+            {/* Payback Info */}
+            {(() => {
+              const _paybackMonths = v.elAnn > 0 && v.diff > 0 ? v.elAnn / (v.diff / 12) : 0;
+              return _paybackMonths > 0 && _paybackMonths <= 12;
+            })() && (
+              <div style={{ background: "#fff", border: `1px solid ${A.line}`, borderRadius: 8, padding: "16px 20px" }}>
+                <div style={{ display: "flex", gap: 12 }}>
+                  <div style={{ width: 4, background: A.green, borderRadius: 2, flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontFamily: A.serif, fontSize: 18, color: A.mute, marginBottom: 2, display: "block" }}>Pays for itself in</span>
+                    <span style={{ fontFamily: A.sans, fontSize: 24, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums", display: "block" }}>
+                      {(v.elAnn > 0 && Math.abs(v.diff) > 0 ? v.elAnn / (Math.abs(v.diff) / 12) : 0).toFixed(1)} months
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Takeaway & CTA button */}
+            <div style={{ background: "#f6f5fe", border: `1px solid ${A.purpleBorder}`, borderRadius: 8, padding: "16px 20px" }}>
+              <span style={{ fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase", color: A.purple2, display: "block", marginBottom: 6 }}>The takeaway</span>
+              <span style={{ fontFamily: A.sans, fontSize: 13, lineHeight: 1.4, color: A.inkSoft, display: "block", marginBottom: 12 }}>
+                {v.diff > 100 ? (
+                  <>You're currently overspending on equity operations. You could save <strong style={{ color: A.ink, fontWeight: 600 }}>{opCurrencySymbol}{Math.abs(v.diff || 0).toLocaleString(opLocale)}/year</strong> while eliminating most manual work.</>
+                ) : (
+                  <>Cost isn't the deciding factor. EquityList ensures your cap table stays accurate, audit-ready, and compliant as you scale.</>
+                )}
+              </span>
+              <PrimaryBtn size="md" fullWidth style={{ padding: "8px 16px" }} onClick={() => window.open(ctaUrl, "_blank")}>
+                {ctaText}
+                <svg className="btn-arr-icon" width="16" height="16" viewBox="0 0 19 19" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "inline-block" }}><path d="M13.5333 9.33379L7 5.13379V13.5338L13.5333 9.33379Z" fill="white" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </PrimaryBtn>
+            </div>
+            
+            <span style={{
+              fontFamily: A.sans,
+              fontSize: 11,
+              color: "rgba(112, 109, 161, 0.8)",
+              textAlign: "center" as const,
+              display: "block",
+              marginTop: 4,
+            }}>
+              Pricing is indicative. Final pricing is tailored.
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <aside style={{
       display: "flex", flexDirection: "column", gap: 14,
       position: sticky ? "sticky" : "static", top: sticky ? 24 : undefined,
+      width: "100%",
+      maxWidth: sticky ? undefined : 480,
+      marginLeft: sticky ? undefined : "auto",
+      marginRight: sticky ? undefined : "auto",
     }}>
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -1154,34 +1787,58 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
             <StatusChip mode={mode} onEdit={() => onRecalculate && onRecalculate({ sh: formData?.sh, oh: formData?.oh, grNewHire: formData?.grNewHire, grRefresh: formData?.grRefresh, geoInc: formData?.geoInc, geoOp: formData?.geoOp, stage: formData?.stage, meth: formData?.meth, planningToFundraise: formData?.planningToFundraise, fundraiseRound: formData?.fundraiseRound, newShareholdersFromFundraise: formData?.newShareholdersFromFundraise, valuationFrequency: formData?.valuationFrequency, valuationType: formData?.valuationType })} />
           </div>
         </div>
-        <div style={{ fontSize: 12.5, color: A.mute, marginTop: 6 }}>
+        <span style={{
+          fontFamily: A.sectionHeader.subtitle.fontFamily,
+          fontSize: A.sectionHeader.subtitle.fontSize,
+          fontWeight: A.sectionHeader.subtitle.fontWeight,
+          color: A.sectionHeader.subtitle.color,
+          lineHeight: A.sectionHeader.subtitle.lineHeight,
+          letterSpacing: A.sectionHeader.subtitle.letterSpacing,
+          display: "block",
+          marginTop: 6
+        }}>
           {mode === "live" ? "Tailored to your inputs. Recalculate any time." : mode === "stale" ? "Previous results. Update and recalculate." : "Illustrative, based on a typical mid-market scenario."}
-        </div>
+        </span>
       </div>
 
       {mode === "stale" && <StaleAlert dirtyCount={dirtyCount} onRecalculate={() => { setLeavingStale(true); onRecalculate && onRecalculate(recalcFormValues); }} />}
 
       <div className={mode === "stale" ? "panel-body--stale" : ""} style={{
         background: "#fff", border: `1px solid ${A.line}`, borderRadius: 8,
-        padding: "20px 22px", position: "relative", overflow: "hidden",
+        padding: "20px", position: "relative", overflow: "hidden",
       }}>
-        <div style={{ position: "absolute", top: 0, right: 0, width: 130, height: 130, background: `radial-gradient(circle at top right, ${v.diff < 0 ? "rgba(192, 48, 33, 0.08)" : A.purpleTint}, transparent 70%)`, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", top: 0, right: 0, width: 130, height: 130, background: `radial-gradient(circle at top right, ${v.diff < 0 ? "rgba(192, 48, 33, 0.08)" : A.greenTint}, transparent 70%)`, pointerEvents: "none" }} />
         <div style={{ position: "relative" }}>
-          <MonoLabel size={9.5} color={A.mute} style={{ marginBottom: 6 }}>{v.diff < 0 ? "Estimated cost increase" : "Your potential savings"}</MonoLabel>
-          <div style={{
-            fontFamily: A.sans, fontSize: compact ? 32 : 38, fontWeight: 600, letterSpacing: -1.2,
-            color: v.diff < 0 ? A.red : A.purple, fontVariantNumeric: "tabular-nums", lineHeight: 1,
-          }}>{opCurrencySymbol}{(v.diff < 0 ? Math.abs(v.diff) : v.diff || 0).toLocaleString(opLocale)}</div>
-          <div style={{ marginTop: 8, fontSize: 12, color: A.mute }}>per year · {savingsPct}% reduction in equity-admin overhead</div>
+          <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "14px", letterSpacing: 0.4, textTransform: "uppercase" as const, color: A.mute, display: "block", marginBottom: 6 }}>{v.diff < 0 ? "Estimated cost increase" : "Your potential savings"}</span>
+          <span style={{
+            fontFamily: A.sans,
+            fontSize: compact ? 32 : 40,
+            fontWeight: 500,
+            letterSpacing: -1.12,
+            color: v.diff < 0 ? A.red : A.green,
+            fontVariantNumeric: "tabular-nums",
+            lineHeight: compact ? "38px" : "48px",
+            display: "block",
+          }}>{opCurrencySymbol}{(v.diff < 0 ? Math.abs(v.diff) : v.diff || 0).toLocaleString(opLocale)}</span>
+          <span style={{
+            fontFamily: A.sectionHeader.subtitle.fontFamily,
+            fontSize: A.sectionHeader.subtitle.fontSize,
+            fontWeight: A.sectionHeader.subtitle.fontWeight,
+            color: A.sectionHeader.subtitle.color,
+            lineHeight: A.sectionHeader.subtitle.lineHeight,
+            letterSpacing: A.sectionHeader.subtitle.letterSpacing,
+            display: "block",
+            marginTop: 8
+          }}>per year · {savingsPct}% reduction in equity-admin overhead</span>
 
           <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${A.lineSoft}`, display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-              <MonoLabel size={9.5}>Current spend</MonoLabel>
-              <div style={{ fontFamily: A.sans, fontSize: 15, fontWeight: 600, color: A.inkSoft, fontVariantNumeric: "tabular-nums", letterSpacing: -0.2, minWidth: 0 }}>{opCurrencySymbol}{(v.annCost || 0).toLocaleString(opLocale)}</div>
+              <span style={{ fontFamily: A.sans, fontSize: 14, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, color: A.ink }}>Current spend</span>
+              <span style={{ fontFamily: A.sans, fontSize: 14, fontWeight: 500, color: A.inkSoft, fontVariantNumeric: "tabular-nums", letterSpacing: 0, minWidth: 0 }}>{opCurrencySymbol}{(v.annCost || 0).toLocaleString(opLocale)}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-              <MonoLabel size={9.5}>With EquityList</MonoLabel>
-              <div style={{ fontFamily: A.sans, fontSize: 15, fontWeight: 600, color: A.purple2, fontVariantNumeric: "tabular-nums", letterSpacing: -0.2, minWidth: 0 }}>{opCurrencySymbol}{(v.elAnn || 0).toLocaleString(opLocale)}</div>
+              <span style={{ fontFamily: A.sans, fontSize: 14, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, color: A.ink }}>With EquityList</span>
+              <span style={{ fontFamily: A.sans, fontSize: 14, fontWeight: 500, color: A.purple, fontVariantNumeric: "tabular-nums", letterSpacing: 0, minWidth: 0 }}>{opCurrencySymbol}{(v.elAnn || 0).toLocaleString(opLocale)}</span>
             </div>
           </div>
         </div>
@@ -1197,7 +1854,7 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
             borderBottom: breakdownOpen ? `1px solid ${A.lineSoft}` : "none",
           }}
         >
-          <MonoLabel size={10.5} color={A.ink}>Cost breakdown</MonoLabel>
+          <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "24px", letterSpacing: 0.4, textTransform: "uppercase" as const, color: A.ink, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", verticalAlign: "middle" }}>Cost breakdown</span>
           <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke={A.mute} strokeWidth="1.6" strokeLinecap="round" style={{ transform: breakdownOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }}>
             <path d="M2 4l3.5 3.5L9 4"/>
           </svg>
@@ -1209,217 +1866,306 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
                 padding: "14px 0",
                 borderBottom: i < items.length - 1 ? `1px solid ${A.lineSoft}` : "none",
               }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
-                  <MonoLabel size={10} color={A.inkSoft}>{it.label}</MonoLabel>
+                <span style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                  <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0.4, textTransform: "uppercase" as const, color: A.ink }}>{it.label}</span>
                   {it.tip && <InfoTip text={it.tip} />}
-                </div>
-                <div style={{ fontFamily: A.mono, fontSize: 10.5, color: A.muteSoft, lineHeight: 1.5, marginBottom: 6, wordBreak: "break-word" }}>{it.formula}</div>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-                  <div style={{ fontFamily: A.sans, fontSize: 17, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums", letterSpacing: -0.3 }}>{it.value}</div>
-                  <div style={{ fontFamily: A.mono, fontSize: 10.5, fontWeight: 700, color: A.muteSoft }}>{it.pct}</div>
-                </div>
+                </span>
+                <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 400, lineHeight: "16px", letterSpacing: 0, color: A.mute, marginBottom: 6, wordBreak: "break-word", display: "block" }}>{it.formula}</span>
+                <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontFamily: A.sans, fontSize: 14, fontWeight: 500, color: A.ink, fontVariantNumeric: "tabular-nums", letterSpacing: 0 }}>{it.value}</span>
+                  <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 600, lineHeight: "16px", letterSpacing: 0, color: "rgb(13, 10, 64)", fontVariantNumeric: "tabular-nums" }}>{it.pct}</span>
+                </span>
               </div>
             ))}
           </div>
         )}
         {breakdownOpen && (
-          <div style={{ padding: "12px 18px 18px", borderTop: `1px solid ${A.lineSoft}`, marginTop: 12 }}>
-            <MonoLabel size={10} color={A.ink} style={{ marginBottom: 12, display: "block" }}>Assumptions</MonoLabel>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <MonoLabel size={10} color={A.inkSoft}>Blended hourly rate</MonoLabel>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontFamily: A.mono, fontSize: 11, color: A.mute }}>{opCurrencySymbol}</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={editedRate !== null && editedRate !== "" ? editedRate : Math.round(v.rate)}
-                    onChange={(e) => {
-                      if (e.target.value && /[^\d]/.test(e.target.value)) {
-                        setEditedRate(e.target.value);
-                      } else {
-                        setEditedRate(e.target.value.replace(/[^\d]/g, ""));
-                      }
-                    }}
-                    style={{
-                      width: 72, textAlign: "right",
-                      border: "none", borderBottom: `1px solid ${editedRate && /[^\d]/.test(editedRate) ? A.redLight : A.line}`,
-                      padding: "4px 0", outline: "none", background: "transparent",
-                      fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums",
-                    }}
-                    onFocus={(e) => (e.currentTarget.style.borderBottomColor = editedRate && /[^\d]/.test(editedRate) ? A.redLight : A.purple)}
-                    onBlur={(e) => (e.currentTarget.style.borderBottomColor = editedRate && /[^\d]/.test(editedRate) ? A.redLight : A.line)}
-                  />
-                  <span style={{ fontFamily: A.mono, fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: A.muteSoft }}>{formatStage(v.stage)} MIX</span>
-                </div>
-                {editedRate && /[^\d]/.test(editedRate) && (
-                  <div style={{ fontSize: 11, color: A.redLight, fontFamily: A.mono, fontWeight: 600, letterSpacing: 0.4, textTransform: "uppercase" }}>Only numbers allowed</div>
-                )}
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
-              <MonoLabel size={10} color={A.inkSoft}>Total equity management hours</MonoLabel>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={editedHours !== null && editedHours !== "" ? editedHours : Math.round(v.manualHTotal)}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/[^\d]/g, "");
-                      setEditedHours(val);
-                    }}
-                    style={{
-                      width: 56, textAlign: "right",
-                      border: "none", borderBottom: `1px solid ${A.line}`,
-                      padding: "4px 0", outline: "none", background: "transparent",
-                      fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums",
-                    }}
-                    onFocus={(e) => (e.currentTarget.style.borderBottomColor = A.purple)}
-                    onBlur={(e) => (e.currentTarget.style.borderBottomColor = A.line)}
-                  />
-                  <span style={{ fontFamily: A.mono, fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: A.muteSoft }}>HRS/YR</span>
-                </div>
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <span style={{ display: "block", padding: "12px 18px 18px", borderTop: `1px solid ${A.lineSoft}`, marginTop: 12 }}>
+            <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0.4, textTransform: "uppercase" as const, color: A.ink, display: "block", marginBottom: 12 }}>Assumptions</span>
+            
+            {/* IN-HOUSE METHOD */}
+            {recalcFormValues?.meth === "in-house" && (
+              <>
+                <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+                  <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase" as const, color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Blended hourly rate</span>
+                  <span style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "flex-end", flexShrink: 0 }}>
+                    <span style={{ width: 12, display: "inline-block", textAlign: "right", fontFamily: A.sans, fontSize: 14, fontWeight: 500, color: A.mute }}>{opCurrencySymbol}</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editedRate !== null ? editedRate : Math.round(v.rate)}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^\d]/g, "");
+                        setEditedRate(val);
+                      }}
+                      style={{
+                        width: 60, textAlign: "right",
+                        border: "none", borderBottom: `1px solid ${A.line}`,
+                        padding: "4px 0", outline: "none", background: "transparent",
+                        fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums",
+                      }}
+                      onFocus={(e) => (e.currentTarget.style.borderBottomColor = A.purple)}
+                      onBlur={(e) => (e.currentTarget.style.borderBottomColor = A.line)}
+                    />
+                    <span style={{ width: 72, display: "inline-block", fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase", color: A.muteSoft, whiteSpace: "nowrap" }}>{formatStage(v.stage)}</span>
+                  </span>
+                </span>
+                <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+                  <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase" as const, color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Total equity management hours</span>
+                  <span style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "flex-end", flexShrink: 0 }}>
+                    <span style={{ width: 12, display: "inline-block" }} />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editedHours !== null ? editedHours : Math.round(v.manualHTotal)}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^\d]/g, "");
+                        setEditedHours(val);
+                      }}
+                      style={{
+                        width: 60, textAlign: "right",
+                        border: "none", borderBottom: `1px solid ${A.line}`,
+                        padding: "4px 0", outline: "none", background: "transparent",
+                        fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums",
+                      }}
+                      onFocus={(e) => (e.currentTarget.style.borderBottomColor = A.purple)}
+                      onBlur={(e) => (e.currentTarget.style.borderBottomColor = A.line)}
+                    />
+                    <span style={{ width: 72, display: "inline-block", fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase", color: A.muteSoft, whiteSpace: "nowrap" }}>HRS/YR</span>
+                  </span>
+                </span>
+              </>
+            )}
+
+            {/* OUTSOURCED RETAINER METHOD */}
+            {recalcFormValues?.meth === "outsourced" && (
+              <>
+                <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+                  <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase" as const, color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Retainer cost</span>
+                  <span style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "flex-end", flexShrink: 0 }}>
+                    <span style={{ width: 12, display: "inline-block", textAlign: "right", fontFamily: A.sans, fontSize: 14, fontWeight: 500, color: A.mute }}>{opCurrencySymbol}</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editedRate !== null ? editedRate : Math.round(v.methodExtCost)}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^\d]/g, "");
+                        setEditedRate(val);
+                      }}
+                      style={{
+                        width: 60, textAlign: "right",
+                        border: "none", borderBottom: `1px solid ${A.line}`,
+                        padding: "4px 0", outline: "none", background: "transparent",
+                        fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums",
+                      }}
+                      onFocus={(e) => (e.currentTarget.style.borderBottomColor = A.purple)}
+                      onBlur={(e) => (e.currentTarget.style.borderBottomColor = A.line)}
+                    />
+                    <span style={{ width: 72, display: "inline-block", fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase", color: A.muteSoft, whiteSpace: "nowrap" }}>/YR</span>
+                  </span>
+                </span>
+                <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+                  <span style={{ fontFamily: A.sans, fontSize: 12, fontWeight: 500, lineHeight: "20px", letterSpacing: 0, textTransform: "uppercase" as const, color: A.ink, flex: "1 1 0%", marginRight: 8 }}>Internal effort hours</span>
+                  <span style={{ display: "flex", alignItems: "baseline", gap: 8, justifyContent: "flex-end", flexShrink: 0 }}>
+                    <span style={{ width: 12, display: "inline-block" }} />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editedHours !== null ? editedHours : Math.round(v.manualHTotal * v.mult)}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^\d]/g, "");
+                        setEditedHours(val);
+                      }}
+                      style={{
+                        width: 60, textAlign: "right",
+                        border: "none", borderBottom: `1px solid ${A.line}`,
+                        padding: "4px 0", outline: "none", background: "transparent",
+                        fontFamily: A.sans, fontSize: 14, fontWeight: 600, color: A.ink, fontVariantNumeric: "tabular-nums",
+                      }}
+                      onFocus={(e) => (e.currentTarget.style.borderBottomColor = A.purple)}
+                      onBlur={(e) => (e.currentTarget.style.borderBottomColor = A.line)}
+                    />
+                    <span style={{ width: 72, display: "inline-block", fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase", color: A.muteSoft, whiteSpace: "nowrap" }}>HRS/YR</span>
+                  </span>
+                </span>
+              </>
+            )}
+
+            <span style={{ display: "flex", gap: 8, marginTop: 14 }}>
               <button
                 onClick={() => {
-                  setEditedRate("");
-                  setEditedHours("");
+                  setEditedRate(null);
+                  setEditedHours(null);
                   setLeavingStale(true);
                   onRecalculate && onRecalculate(recalcFormValues, {});
                 }}
-                style={{ flex: 1, padding: "10px 16px", background: A.lineSoft, color: A.ink, border: `1px solid ${A.line}`, borderRadius: 6, fontFamily: A.sans, fontSize: 14, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}
+                style={{ flex: 1, padding: "8px 16px", background: A.lineSoft, color: A.ink, border: `1px solid ${A.line}`, borderRadius: 8, fontFamily: A.sans, fontSize: 14, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = A.line; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = A.lineSoft; }}
               >
                 Reset
               </button>
               <button
+                disabled={editedRate === "" || editedHours === ""}
                 onClick={() => {
+                  if (editedRate === "" || editedHours === "") return;
                   const overrides = {};
                   let hasChanges = false;
-                  if (editedRate !== null && editedRate !== "" && editedRate !== String(Math.round(v.rate))) {
-                    overrides.rate = parseInt(editedRate, 10);
-                    hasChanges = true;
+                  
+                  if (editedRate !== null && editedRate !== "") {
+                    const rateVal = parseInt(editedRate, 10);
+                    if (recalcFormValues?.meth === "outsourced") {
+                      if (rateVal !== Math.round(v.methodExtCost)) {
+                        overrides.methodExtCost = rateVal;
+                        hasChanges = true;
+                      }
+                    } else {
+                      if (rateVal !== Math.round(v.rate)) {
+                        overrides.rate = rateVal;
+                        hasChanges = true;
+                      }
+                    }
                   }
-                  if (editedHours !== null && editedHours !== "" && editedHours !== String(Math.round(v.manualHTotal))) {
-                    overrides.manualHTotal = parseInt(editedHours, 10);
-                    hasChanges = true;
+                  
+                  if (editedHours !== null && editedHours !== "") {
+                    const hoursVal = parseInt(editedHours, 10);
+                    const compareHours = recalcFormValues?.meth === "outsourced" ? Math.round(v.manualHTotal * v.mult) : Math.round(v.manualHTotal);
+                    if (hoursVal !== compareHours) {
+                      overrides.manualHTotal = hoursVal;
+                      hasChanges = true;
+                    }
                   }
+                  
                   if (hasChanges) {
                     setLeavingStale(true);
                     onRecalculate && onRecalculate(recalcFormValues, overrides);
                   }
                 }}
-                style={{ flex: 1, padding: "10px 16px", background: A.purple, color: "#fff", border: "none", borderRadius: 6, fontFamily: A.sans, fontSize: 14, fontWeight: 600, cursor: "pointer", transition: "background .15s" }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = A.purple2; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = A.purple; }}
+                style={{ flex: 1, padding: "8px 16px", background: (editedRate === "" || editedHours === "") ? A.line : A.purple, color: (editedRate === "" || editedHours === "") ? A.muteSoft : "#fff", border: "none", borderRadius: 8, fontFamily: A.sans, fontSize: 14, fontWeight: 600, cursor: (editedRate === "" || editedHours === "") ? "not-allowed" : "pointer", transition: "background .15s" }}
+                onMouseEnter={(e) => { if (!(editedRate === "" || editedHours === "")) e.currentTarget.style.background = A.purple2; }}
+                onMouseLeave={(e) => { if (!(editedRate === "" || editedHours === "")) e.currentTarget.style.background = A.purple; }}
               >
                 Apply
               </button>
-            </div>
-          </div>
+            </span>
+          </span>
         )}
       </div>
 
-      <div className={mode === "stale" ? "panel-body--stale" : ""} style={{ background: "#fff", border: `1px solid ${A.line}`, borderRadius: 8, padding: "18px", position: "relative", overflow: "hidden" }}>
+      {(() => {
+        const _paybackMonths = v.elAnn > 0 && v.diff > 0 ? v.elAnn / (v.diff / 12) : 0;
+        return _paybackMonths > 0 && _paybackMonths <= 12;
+      })() && (
+        <div className={mode === "stale" ? "panel-body--stale" : ""} style={{ background: "#fff", border: `1px solid ${A.line}`, borderRadius: 8, padding: "20px", position: "relative", overflow: "hidden" }}>
+          
+          {/* Header row */}
+          <div style={{ marginBottom: 20, paddingBottom: 12, borderBottom: `1px solid ${A.lineSoft}` }}>
+            <MonoLabel size={11} color={A.ink}>RETURN ON INVESTMENT</MonoLabel>
+          </div>
 
-        {/* Header row */}
-        <div style={{ marginBottom: 20, paddingBottom: 12, borderBottom: `1px solid ${A.lineSoft}` }}>
-          <MonoLabel size={10.5} color={A.ink}>RETURN ON INVESTMENT</MonoLabel>
+          {/* Content with left accent bar */}
+          <div style={{ display: "flex", gap: 12 }}>
+            {(() => {
+              const hasSavings = v.diff > 0;
+              const paybackMonths = v.elAnn > 0 && Math.abs(v.diff) > 0 ? v.elAnn / (Math.abs(v.diff) / 12) : 0;
+
+              return (
+                <>
+                  <div style={{ width: 4, background: hasSavings ? A.green : A.red, borderRadius: 2, flexShrink: 0 }} />
+
+                  <div style={{ flex: 1, marginBottom: 20 }}>
+                    {hasSavings ? (
+                      <>
+                        <span style={{
+                          fontFamily: A.serif, fontSize: 22, fontWeight: 400, fontStyle: "normal",
+                          color: A.mute, lineHeight: 1.2, letterSpacing: -0.2,
+                          marginBottom: 4, display: "block",
+                        }}>
+                          Pays for itself in
+                        </span>
+                        <span style={{
+                          fontFamily: A.sans, fontSize: 32, fontWeight: 600,
+                          color: A.ink, lineHeight: 1.2, letterSpacing: -0.6,
+                          marginBottom: 12,
+                          fontVariantNumeric: "tabular-nums", display: "block",
+                        }}>
+                          {paybackMonths.toFixed(1)} months
+                        </span>
+
+                        <span style={{
+                          fontFamily: A.bodyText.fontFamily,
+                          fontSize: A.bodyText.fontSize,
+                          fontWeight: A.bodyText.fontWeight,
+                          color: A.bodyText.color,
+                          lineHeight: A.bodyText.lineHeight,
+                          display: "block",
+                          margin: 0,
+                        }}>
+                          EquityList recovers ~{v.elAnn > 0 ? Math.round((Math.abs(v.diff) / v.elAnn) * 100) : 0}% of its annual cost through admin savings alone.
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{
+                          fontFamily: A.serif, fontSize: 22, fontWeight: 400, fontStyle: "normal",
+                          color: A.mute, lineHeight: 1.2, letterSpacing: -0.2,
+                          marginBottom: 4, display: "block",
+                        }}>
+                          Your current setup is cheaper today.
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
         </div>
-
-        {/* Content with left accent bar */}
-        <div style={{ display: "flex", gap: 12 }}>
-          {(() => {
-            const hasSavings = v.diff > 0;
-            const paybackMonths = v.elAnn / (Math.abs(v.diff) / 12);
-
-            return (
-              <>
-                <div style={{ width: 4, background: hasSavings ? A.purple : A.red, borderRadius: 2, flexShrink: 0 }} />
-
-                <div style={{ flex: 1, marginBottom: 20 }}>
-                  {hasSavings ? (
-                    <>
-                      <div style={{
-                        fontFamily: A.sans, fontSize: 15, fontWeight: 400,
-                        color: A.mute, lineHeight: 1.4,
-                        marginBottom: 4,
-                      }}>
-                        Pays for itself in
-                      </div>
-                      <div style={{
-                        fontFamily: A.sans, fontSize: 32, fontWeight: 700,
-                        color: A.ink, lineHeight: 1.2, letterSpacing: -0.6,
-                        marginBottom: 12,
-                        fontVariantNumeric: "tabular-nums",
-                      }}>
-                        {paybackMonths.toFixed(1)} months
-                      </div>
-
-                      <p style={{ fontSize: 13, color: A.mute, lineHeight: 1.5, margin: 0 }}>
-                        EquityList recovers ~{Math.round((Math.abs(v.diff) / v.elAnn) * 100)}% of its annual cost through admin savings alone.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{
-                        fontFamily: A.sans, fontSize: 15, fontWeight: 400,
-                        color: A.mute, lineHeight: 1.4,
-                        marginBottom: 4,
-                      }}>
-                        Additional cost
-                      </div>
-                      <div style={{
-                        fontFamily: A.sans, fontSize: 32, fontWeight: 700,
-                        color: A.ink, lineHeight: 1.2, letterSpacing: -0.6,
-                        marginBottom: 12,
-                        fontVariantNumeric: "tabular-nums",
-                      }}>
-                        {opCurrencySymbol}{Math.abs(v.diff).toLocaleString(opLocale)}/yr
-                      </div>
-
-                      <p style={{ fontSize: 13, color: A.mute, lineHeight: 1.5, margin: 0 }}>
-                        EquityList costs {opCurrencySymbol}{v.elAnn.toLocaleString(opLocale)}/year vs. {opCurrencySymbol}{(v.elAnn - v.diff).toLocaleString(opLocale)}/year for your current method. The value is in reduced risk, audit readiness, and compliance as you scale.
-                      </p>
-                    </>
-                  )}
-                </div>
-              </>
-            );
-          })()}
-        </div>
-
-      </div>
+      )}
 
       <div className={mode === "stale" ? "panel-body--stale" : ""} style={{
-        background: A.purpleTint, border: `1px solid ${A.purpleBorder}`, borderRadius: 8,
-        padding: "16px 18px",
+        background: "#f6f5fe", border: `1px solid ${A.purpleBorder}`, borderRadius: 8,
+        padding: "20px",
       }}>
-        <MonoLabel size={9.5} color={A.purple2} style={{ marginBottom: 8 }}>The takeaway</MonoLabel>
-        <p style={{ fontSize: 13, color: A.inkSoft, lineHeight: 1.55, margin: 0, marginBottom: 14 }}>
+        <span style={{ fontFamily: A.sans, fontSize: 11, fontWeight: 500, letterSpacing: 0.4, textTransform: "uppercase" as const, color: A.purple2, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", verticalAlign: "middle", marginBottom: 8 }}>The takeaway</span>
+        <span style={{
+          fontFamily: A.bodyText.fontFamily,
+          fontSize: A.bodyText.fontSize,
+          fontWeight: A.bodyText.fontWeight,
+          color: A.bodyText.color,
+          lineHeight: A.bodyText.lineHeight,
+          display: "block",
+          margin: 0,
+          marginBottom: 14,
+        }}>
           {v.diff > 100 ? (
-            <>You're currently overspending on equity operations. You could save <strong style={{ color: A.ink, fontWeight: 700 }}>{opCurrencySymbol}{Math.abs(v.diff || 0).toLocaleString(opLocale)}/year</strong> while eliminating most manual work. EquityList ensures your cap table stays accurate, audit-ready, and compliant as you scale.</>
+            <>You're currently overspending on equity operations. You could save <strong style={{ color: A.ink, fontWeight: 600 }}>{opCurrencySymbol}{Math.abs(v.diff || 0).toLocaleString(opLocale)}/year</strong> while eliminating most manual work. EquityList ensures your cap table stays accurate, audit-ready, and compliant as you scale.</>
           ) : v.diff < -100 ? (
             <>Your current setup is cost-efficient for now. As you scale, risks increase. EquityList removes manual work, mitigates compliance gaps, and prevents costly errors that grow with complexity.</>
           ) : (
             <>Cost isn't the deciding factor. The real difference is reliability as complexity increases. EquityList ensures your cap table stays accurate, audit-ready, and compliant as you scale.</>
           )}
-        </p>
-        <PrimaryBtn fullWidth size="md" onClick={() => window.open(ctaUrl, "_blank")}>
+        </span>
+        <PrimaryBtn size="md" fullWidth style={{ padding: "8px 16px" }} onClick={() => window.open(ctaUrl, "_blank")}>
           {ctaText}
-          <span className="btn-arr-icon" style={{ fontSize: 14, opacity: 0.65, transition: "transform 0.15s", display: "inline-block" }}>▸</span>
+          <svg className="btn-arr-icon" width="16" height="16" viewBox="0 0 19 19" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "inline-block", transition: "transform 0.15s" }}><g opacity="0.6"><path d="M13.5333 9.33379L7 5.13379V13.5338L13.5333 9.33379Z" fill="white" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></g></svg>
         </PrimaryBtn>
       </div>
 
-      <div style={{ fontSize: 11, color: A.muteSoft, lineHeight: 1.5 }}>
+      <span style={{
+        fontFamily: A.sans,
+        fontSize: 12,
+        fontWeight: 400,
+        color: "rgba(112, 109, 161, 1)",
+        lineHeight: "16px",
+        display: "block",
+        letterSpacing: 0,
+        textAlign: "center" as const,
+        marginTop: 14,
+      }}>
         Pricing is indicative, based on benchmarks for companies of your size. Final pricing is tailored.
-      </div>
+      </span>
     </aside>
   );
 }
@@ -1427,30 +2173,76 @@ function ALiveEstimate({ width, mode, results, onRecalculate, dirtyCount, formDa
 // ─── Root Component (Webflow entry point) ────────────────────────────────────
 export default function ROICalculator({
   showHero = true,
-  heroBadgeText = "ROI Calculator · v2.4",
   heroTitlePre = "How much is managing equity on",
   heroTitleHighlight = "spreadsheets",
   heroTitlePost = "costing you?",
   heroSubtitle = "Based on industry benchmarks and real company data. See precisely how much time and capital is wasted on manual administration.",
   ctaText = "Book a demo",
   ctaUrl = "https://www.equitylist.co/contact",
+  defaultGeoInc = "India",
+  defaultGeoOp = "India",
+  defaultStage = "Series A/B",
+  defaultLegalEntity = "",
+  defaultShareholders = 30,
+  defaultOptionHolders = 15,
+  defaultNewHireGrants = 5,
+  defaultRefreshGrants = 5,
+  defaultFundraise = false,
+  defaultFundraiseRound = "Seed",
+  defaultNewShareholdersFromFundraise = 0,
+  defaultValuation = false,
+  defaultValFreq = "Annually",
+  defaultValType = "409A",
+  defaultAdminMethod = "In-house (Spreadsheets)",
 }) {
+  // Helper to map UI values to internal keys
+  const mapCountry = (val) => {
+    if (val === "United States") return "us";
+    if (val === "Singapore") return "singapore";
+    if (val === "United Kingdom") return "uk";
+    return "india";
+  };
+  const mapStage = (val) => {
+    if (val === "Pre-seed") return "preseed";
+    if (val === "Seed") return "seed";
+    if (val === "Series B/C") return "seriesbc";
+    if (val === "Series C+") return "seriesc";
+    return "seriesab";
+  };
+  const mapAdminMethod = (val) => {
+    if (val === "Outsourced (CA/Law Firm)") return "outsourced";
+    return "in-house";
+  };
+  const mapValFreq = (val) => {
+    if (val === "Quarterly") return "quarterly";
+    return "annually";
+  };
+  const mapValType = (val) => {
+    if (val === "Black-Scholes") return "blackscholes";
+    if (val === "Reddy Valuation (RV)") return "rv";
+    if (val === "Market Benchmark (MB)") return "mb";
+    if (val === "HMRC") return "hmrc";
+    return "409a";
+  };
+
   const [width, setWidth] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 1280));
   const [formData, setFormData] = useState(null);
   const [results, setResults] = useState(() => {
     const defaultInputs = {
-      sh: 30,
-      oh: 15,
-      grNewHire: 5,
-      grRefresh: 5,
-      geoInc: "india",
-      geoOp: "india",
-      stage: "seriesab",
-      meth: "in-house",
-      legalEntityName: "",
-      planningToFundraise: false,
-      valuationFrequency: null,
-      valuationType: null,
+      sh: Number(defaultShareholders),
+      oh: Number(defaultOptionHolders),
+      grNewHire: Number(defaultNewHireGrants),
+      grRefresh: Number(defaultRefreshGrants),
+      geoInc: mapCountry(defaultGeoInc),
+      geoOp: mapCountry(defaultGeoOp),
+      stage: mapStage(defaultStage),
+      meth: mapAdminMethod(defaultAdminMethod),
+      legalEntityName: defaultLegalEntity,
+      planningToFundraise: defaultFundraise,
+      fundraiseRound: mapStage(defaultFundraiseRound),
+      newShareholdersFromFundraise: Number(defaultNewShareholdersFromFundraise),
+      valuationFrequency: defaultValuation ? mapValFreq(defaultValFreq) : null,
+      valuationType: defaultValuation ? mapValType(defaultValType) : null,
     };
     return computeROI(defaultInputs);
   });
@@ -1460,6 +2252,37 @@ export default function ROICalculator({
   const [currentFormValues, setCurrentFormValues] = useState({});
   const [editedRate, setEditedRate] = useState(null);
   const [editedHours, setEditedHours] = useState(null);
+  const staticResultsRef = useRef(null);
+
+  // Sync results state when Webflow properties are updated
+  useEffect(() => {
+    const defaultInputs = {
+      sh: Number(defaultShareholders),
+      oh: Number(defaultOptionHolders),
+      grNewHire: Number(defaultNewHireGrants),
+      grRefresh: Number(defaultRefreshGrants),
+      geoInc: mapCountry(defaultGeoInc),
+      geoOp: mapCountry(defaultGeoOp),
+      stage: mapStage(defaultStage),
+      meth: mapAdminMethod(defaultAdminMethod),
+      legalEntityName: defaultLegalEntity,
+      planningToFundraise: defaultFundraise,
+      fundraiseRound: mapStage(defaultFundraiseRound),
+      newShareholdersFromFundraise: Number(defaultNewShareholdersFromFundraise),
+      valuationFrequency: defaultValuation ? mapValFreq(defaultValFreq) : null,
+      valuationType: defaultValuation ? mapValType(defaultValType) : null,
+    };
+    setResults(computeROI(defaultInputs));
+    setFormData(null);
+    setMode("sample");
+    setDirtyInputs({});
+    setErrors({});
+  }, [
+    defaultGeoInc, defaultGeoOp, defaultStage, defaultLegalEntity,
+    defaultShareholders, defaultOptionHolders, defaultNewHireGrants, defaultRefreshGrants,
+    defaultFundraise, defaultFundraiseRound, defaultNewShareholdersFromFundraise,
+    defaultValuation, defaultValFreq, defaultValType, defaultAdminMethod
+  ]);
 
   useEffect(() => {
     const handleResize = () => setWidth(window.innerWidth);
@@ -1470,6 +2293,19 @@ export default function ROICalculator({
   const isMobile = width < 720;
   const isTablet = width >= 720 && width < 1100;
   const isDesktop = width >= 1100;
+
+  const [staticVisible, setStaticVisible] = useState(false);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const el = staticResultsRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      setStaticVisible(entry.isIntersecting);
+    }, { threshold: 0.05 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isMobile, results]);
 
   const validateField = (field, value) => {
     const num = parseInt(value, 10);
@@ -1566,26 +2402,53 @@ export default function ROICalculator({
   };
 
   return (
-    <div style={{
+    <div className="roi-calculator-root" style={{
       width: "100%",
       fontFamily: A.sans, color: A.ink, background: "#F6F5FE",
       WebkitFontSmoothing: "antialiased",
       position: "relative",
     }}>
-      {showHero && <AHero width={width} badgeText={heroBadgeText} titlePre={heroTitlePre} titleHighlight={heroTitleHighlight} titlePost={heroTitlePost} subtitle={heroSubtitle} />}
+      {showHero && <AHero width={width} titlePre={heroTitlePre} titleHighlight={heroTitleHighlight} titlePost={heroTitlePost} subtitle={heroSubtitle} />}
 
       <div style={{
         maxWidth: 1280, margin: "0 auto",
-        padding: isMobile ? "16px 20px 32px" : "24px 40px 80px",
+        padding: isMobile ? "16px 20px 140px" : "24px 40px 80px",
       }} className="roi-grid">
-        <AForm width={width} onCalculate={handleCalculate} onInputChange={handleInputChange} errors={errors} mode={mode} editedRate={editedRate} editedHours={editedHours} />
+        <AForm
+          width={width}
+          onCalculate={handleCalculate}
+          onInputChange={handleInputChange}
+          errors={errors}
+          mode={mode}
+          editedRate={editedRate}
+          editedHours={editedHours}
+          defaultGeoInc={mapCountry(defaultGeoInc)}
+          defaultGeoOp={mapCountry(defaultGeoOp)}
+          defaultStage={mapStage(defaultStage)}
+          defaultLegalEntity={defaultLegalEntity}
+          defaultShareholders={String(defaultShareholders)}
+          defaultOptionHolders={String(defaultOptionHolders)}
+          defaultNewHireGrants={String(defaultNewHireGrants)}
+          defaultRefreshGrants={String(defaultRefreshGrants)}
+          defaultFundraise={defaultFundraise}
+          defaultFundraiseRound={mapStage(defaultFundraiseRound)}
+          defaultNewShareholdersFromFundraise={String(defaultNewShareholdersFromFundraise)}
+          defaultValuation={defaultValuation}
+          defaultValFreq={mapValFreq(defaultValFreq)}
+          defaultValType={mapValType(defaultValType)}
+          defaultAdminMethod={mapAdminMethod(defaultAdminMethod)}
+        />
         {!isMobile && <ALiveEstimate width={isDesktop ? Math.min(380, width - 80) : width - 80} mode={mode} results={results} onRecalculate={handleCalculate} dirtyCount={Object.keys(dirtyInputs).length} formData={formData} currentFormValues={currentFormValues} sticky={isDesktop} editedRate={editedRate} setEditedRate={setEditedRate} editedHours={editedHours} setEditedHours={setEditedHours} ctaText={ctaText} ctaUrl={ctaUrl} />}
       </div>
 
       {isMobile && (
-        <div style={{ padding: "0 20px 40px", maxWidth: 1280, margin: "0 auto" }}>
+        <div ref={staticResultsRef} id="roi-mobile-static-results" style={{ padding: "0 20px 40px", maxWidth: 1280, margin: "0 auto" }}>
           <ALiveEstimate width={width - 40} mode={mode} results={results} onRecalculate={handleCalculate} dirtyCount={Object.keys(dirtyInputs).length} formData={formData} currentFormValues={currentFormValues} sticky={false} editedRate={editedRate} setEditedRate={setEditedRate} editedHours={editedHours} setEditedHours={setEditedHours} ctaText={ctaText} ctaUrl={ctaUrl} />
         </div>
+      )}
+
+      {isMobile && (
+        <ALiveEstimate isMobileLayout showSticky={!staticVisible} width={width} mode={mode} results={results} onRecalculate={handleCalculate} dirtyCount={Object.keys(dirtyInputs).length} formData={formData} currentFormValues={currentFormValues} sticky={false} editedRate={editedRate} setEditedRate={setEditedRate} editedHours={editedHours} setEditedHours={setEditedHours} ctaText={ctaText} ctaUrl={ctaUrl} />
       )}
     </div>
   );

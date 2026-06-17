@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunk_EquityListRoiCalculator=self.webpackChunk_EquityListRoiCalculator||[]).push([[895],{677(e,t,u){u.r(t),u.d(t,{default:()=>i});const i={env:"Client",Renderer:u(108).$x}}}]);

@@ -1,5 +1,5 @@
 /* ── Google Fonts (must be @import, not <link>, to work inside Shadow DOM) ── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
 /* ── Host element fills its Webflow layout container ── */
 :host {
@@ -72,12 +72,17 @@
 .form-grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px 24px; }
 .form-grid-shareholders { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: flex-end; }
 
+/* Allow grid items to shrink below their content width (prevents overflow on narrow screens) */
+.form-grid-2 > *,
+.form-grid-4 > *,
+.form-grid-shareholders > * { min-width: 0; }
+
 /* ── Form cards ── */
 .form-card {
   background: #ffffff;
   border-radius: 8px;
   border: 1px solid #e0dff5;
-  padding: 24px 24px 28px;
+  padding: 24px 40px;
   box-shadow: 0 1px 4px rgba(13,20,37,0.04);
   transition: box-shadow 0.2s, border-color 0.2s;
 }
@@ -99,9 +104,14 @@
   .roi-grid { grid-template-columns: 1fr; gap: 32px; }
 }
 @media (max-width: 768px) {
+  .form-card { padding: 20px 24px; }
   .form-grid-2 { grid-template-columns: 1fr; gap: 20px; }
   .form-grid-4 { grid-template-columns: 1fr 1fr; gap: 16px; }
   .form-grid-shareholders { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .form-card { padding: 20px 16px; }
+  .form-grid-4 { grid-template-columns: 1fr; gap: 20px; }
 }
 
 /* ── Remove number input spinners ── */
@@ -113,4 +123,43 @@ input[type='number']::-webkit-inner-spin-button {
 
 input[type='number'] {
   -moz-appearance: textfield;
+}
+
+/* ── Typography Design Tokens ── */
+.roi-calculator-root {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  letter-spacing: normal;
+  color: rgba(68, 66, 102, 1);
+}
+
+.roi-calculator-root h1 {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-weight: 500;
+  font-size: 52px;
+  line-height: 64px;
+  letter-spacing: -1.12px;
+  vertical-align: middle;
+  color: rgba(13, 10, 64, 1);
+}
+
+.roi-calculator-root h2 {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-weight: 500;
+  font-size: 36px;
+  line-height: 46px;
+  letter-spacing: -0.65px;
+  color: rgba(13, 10, 64, 1);
+}
+
+.roi-calculator-root p {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 28px;
+  letter-spacing: 0.2px;
+  vertical-align: middle;
+  color: rgba(68, 66, 102, 1);
 }
