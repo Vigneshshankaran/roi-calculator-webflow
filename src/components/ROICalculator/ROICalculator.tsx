@@ -589,7 +589,7 @@ function FormField({ label, value, onChange, placeholder, type = "text", require
         <input
           type={type === "number" ? "text" : type}
           inputMode={type === "number" ? "numeric" : undefined}
-          value={value || ""}
+          value={value ?? ""}
           onChange={handleChange}
           placeholder={placeholder}
           aria-invalid={error ? "true" : "false"}
@@ -1096,6 +1096,11 @@ function AForm({
   useEffect(() => { setOptionHolders(defaultOptionHolders); }, [defaultOptionHolders]);
   useEffect(() => { setNewHireGrants(defaultNewHireGrants); }, [defaultNewHireGrants]);
   useEffect(() => { setRefreshGrants(defaultRefreshGrants); }, [defaultRefreshGrants]);
+  useEffect(() => {
+    if (parseInt(optionHolders, 10) <= 0 && refreshGrants !== "0") {
+      setRefreshGrants("0");
+    }
+  }, [optionHolders]);
   useEffect(() => { setGeoInc(defaultGeoInc); }, [defaultGeoInc]);
   useEffect(() => { setGeoOp(defaultGeoOp); }, [defaultGeoOp]);
   useEffect(() => { setLegalEntity(defaultLegalEntity); }, [defaultLegalEntity]);
@@ -2386,10 +2391,10 @@ export default function ROICalculator({
     if (!inputs?.legalEntityName || inputs.legalEntityName.trim() === "") newErrors.legalEntityName = "Field required";
 
     // Validate numeric fields
-    const sharesErr = validateField("shareholders", String(inputs?.sh || ""));
-    const holdersErr = validateField("optionHolders", String(inputs?.oh || ""));
-    const newHireGrantsErr = validateField("grants", String(inputs?.grNewHire || ""));
-    const refreshGrantsErr = validateField("grants", String(inputs?.grRefresh || ""));
+    const sharesErr = validateField("shareholders", String(inputs?.sh ?? ""));
+    const holdersErr = validateField("optionHolders", String(inputs?.oh ?? ""));
+    const newHireGrantsErr = validateField("grants", String(inputs?.grNewHire ?? ""));
+    const refreshGrantsErr = validateField("grants", String(inputs?.grRefresh ?? ""));
 
     if (sharesErr) newErrors.shareholders = sharesErr;
     if (holdersErr) newErrors.optionHolders = holdersErr;
