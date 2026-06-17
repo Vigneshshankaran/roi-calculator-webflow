@@ -386,20 +386,24 @@ function computeROI(inputs, overrides = {}) {
 
   let methodExtCost = overrides.methodExtCost || 0;
   if (meth === 'outsourced' && !overrides.methodExtCost) {
-    const baseRetainer = STAGE_RETAINER[geoInc][stageKey];
-
-    // Scale retainer based on complexity (Approach 2)
     const totalStakeholders = sh + oh + parseInt(grNewHire, 10);
-    const stakeholderBaseline = STAKEHOLDER_BASELINES[stageKey];
-    const grantBaseline = GRANT_BASELINES[stageKey];
+    const grRefreshNum = parseInt(grRefresh, 10);
 
-    const shDenominator = stageKey === 'seriesc' ? 200 : 144;
-    const grDenominator = stageKey === 'seriesc' ? 50 : 37;
-    const stakeholderFactor = 1 + Math.max(0, totalStakeholders - stakeholderBaseline) / shDenominator;
-    const grantFactor = 1 + Math.max(0, grRefresh - grantBaseline) / grDenominator;
-    const fundraisingFactor = planningToFundraise ? 1.3 : 1.0;
+    if (totalStakeholders === 0 && grRefreshNum === 0) {
+      methodExtCost = 0;
+    } else {
+      const baseRetainer = STAGE_RETAINER[geoInc][stageKey];
+      const stakeholderBaseline = STAKEHOLDER_BASELINES[stageKey];
+      const grantBaseline = GRANT_BASELINES[stageKey];
 
-    methodExtCost = Math.round(baseRetainer * stakeholderFactor * grantFactor * fundraisingFactor);
+      const shDenominator = stageKey === 'seriesc' ? 200 : 144;
+      const grDenominator = stageKey === 'seriesc' ? 50 : 37;
+      const stakeholderFactor = 1 + Math.max(0, totalStakeholders - stakeholderBaseline) / shDenominator;
+      const grantFactor = 1 + Math.max(0, grRefreshNum - grantBaseline) / grDenominator;
+      const fundraisingFactor = planningToFundraise ? 1.3 : 1.0;
+
+      methodExtCost = Math.round(baseRetainer * stakeholderFactor * grantFactor * fundraisingFactor);
+    }
   }
 
   let valuationCost = 0;
@@ -1184,7 +1188,11 @@ function AForm({
       <PrimaryBtn size="lg" fullWidth style={{ padding: "16px 28px" }} onClick={() => {
         const overrides = {};
         if (editedRate !== null && editedRate !== "") {
-          overrides.rate = parseInt(editedRate, 10);
+          if (adminMethod === "outsourced") {
+            overrides.methodExtCost = parseInt(editedRate, 10);
+          } else {
+            overrides.rate = parseInt(editedRate, 10);
+          }
         }
         if (editedHours !== null && editedHours !== "") {
           overrides.manualHTotal = parseInt(editedHours, 10);
